@@ -1,0 +1,18 @@
+=== OULAD Model 1 - Final Report ===
+
+5-Fold CV ROC-AUC: 0.9670 +/- 0.0014
+Held-out Test ROC-AUC: 0.9711
+
+XGBoost Classification Report:
+              precision    recall  f1-score   support
+
+           0       0.94      0.89      0.91      3442
+           1       0.88      0.93      0.91      3077
+
+    accuracy                           0.91      6519
+   macro avg       0.91      0.91      0.91      6519
+weighted avg       0.91      0.91      0.91      6519
+
+Confusion Matrix:
+[[3047  395]
+ [ 202 2875]]

@@ -1,0 +1,287 @@
+kc,avg_mastery,num_students
+CLT-R-DEN,0.3007246376811594,23
+CLT-R-NUM,0.10416666666666667,24
+CLT-ROW-1,0.7063119537234515,706
+CLT-ROW-1-COEFF,0.7391886182370305,674
+CLT-ROW-2-SINGLE,0.8247652268185711,627
+CLT-ROW-2-SINGLE-DO-ROW-1-FIRST,0.6845598845598845,187
+Calculate part in proportion with fractions,0.7297399937349295,453
+Calculate product of means or extremes,0.8198795737391845,269
+Calculate ratio denominator from given,0.474757793227181,490
+Calculate ratio numerator from given,0.4221517724079199,488
+Calculate solution with means and extremes,0.6991817275525141,267
+Calculate total in proportion with fractions,0.7166918908881215,451
+Calculate unit rate,0.6296416876421487,470
+Changing axis bounds,0.7476330292355208,950
+Changing axis intervals,0.9806469772242957,945
+Choose Graphical Refl-v,0.6922921522921524,5
+Choose Graphical k,0.8450061842918986,7
+Choose mean,0.7489133246208718,53
+Choose median,0.7458403274729805,49
+Choose mode,0.7361933621933622,50
+Choose non-perfect square,0.7316475191475191,50
+Choose operator in fractional identity,0.8262709320555535,455
+Compare differences - added internal,0.7394003527336861,45
+Compare differences - added outlier,0.7096992653810835,44
+Compare differences - removed outlier,0.6928284061617395,45
+Compare large quantities in context,0.7283060476938028,49
+Compare means - added internal,0.9351587301587301,45
+Compare means - added outlier,0.9315656565656565,44
+Compare means - removed outlier,0.9689842873176207,45
+Compare medians - added internal,0.9277513227513228,45
+Compare medians - added outlier,0.9462637741046831,44
+Compare medians - removed outlier,0.944751236417903,45
+Compare point and original mean - added internal,0.7612169312169312,45
+Compare point and original mean - added outlier,0.8057506887052341,44
+Compare point and original mean - removed outlier,0.4981910681910682,45
+Compare probabilities -- different trials,0.5983967187618873,89
+Compare probabilities -- same trials,0.6892050948806047,87
+Compare small quantities in context,0.654369924070257,53
+Compare two large numbers in scientific notation,0.8300724637681158,46
+Compare two small numbers in scientific notation,0.5982030548068284,53
+Compare unit rates,0.9012764791753253,469
+Construct square from area,0.792482779275232,53
+Construct square from side length,0.8611560347409404,53
+Correctly placing points,0.7100467516835219,920
+Cterm-Expression-Gla:Student-Modeling-Analysis,0.91062308903218,143
+DI-EXPR,0.0,27
+DI-ROW1,0.9299824997337435,621
+DI-ROW2-1-SC,0.7768483840412183,602
+Define Variable,0.8837575011523009,1089
+Describe-Cterm-Gla:Student-Modeling-Analysis,0.7551235931517621,142
+Describe-Product-Gla:Student-Modeling-Analysis,0.8018701808756908,143
+Describe-Proportional-Constant-Gla:Student-Modeling-Analysis,0.6916448134860874,142
+Describe-Sum-Gla:Student-Modeling-Analysis,0.6622381139986774,142
+Describe-Variable-Gla:Student-Modeling-Analysis,0.712009916099025,143
+Determine that data value does make sense,0.8857142857142857,16
+Determine that data value does not make sense - above range,0.3868131868131868,13
+Determine that data value does not make sense - below range,0.8857142857142858,14
+Determine that mean does make sense,0.7882539682539683,15
+Determine that mean does not make sense - above range,0.7250000000000001,13
+Determine that mean does not make sense - below range,0.7285714285714285,14
+Edit Algebraic k,0.8528554778554779,7
+Edit Algebraic refl-v,0.5011544011544011,5
+Enter Calculated value of rate,0.9355699693530654,457
+Enter Calculated value of ratio,0.8934374701755764,458
+Enter compound probability,0.4914835164835165,6
+Enter decimal probability of event,0.9040163417099631,111
+Enter denominator of form of 1,0.7390507082816378,452
+Enter denominator of given fraction in proportion,0.7313300811282357,459
+Enter denominator of given rate in proportion,0.8746907286495139,461
+Enter denominator of given unit rate in proportion,0.754824725963622,454
+Enter experimental probability for large number,0.8351337766463806,89
+Enter experimental probability for medium number,0.8307686466463979,89
+Enter experimental probability for small number,0.8429810185731786,89
+Enter first extreme in equation,0.7750378967317765,272
+Enter first mean in equation,0.8900241962607784,274
+Enter fractional probability of event,0.9482968298349229,111
+Enter given hypotenuse in context,1.0,8
+Enter given hypotenuse out of context,1.0,8
+Enter given leg in context,0.8708458208458209,13
+Enter given leg out of context,0.9745370370370371,12
+Enter given part in proportion,0.7628673027902102,454
+Enter given rate denominator,0.9257306126360798,471
+Enter given rate numerator,0.7805777114949911,472
+Enter given ratio denominator,0.7868736825790941,503
+Enter given ratio numerator,0.7926538118888609,505
+Enter given total in proportion,0.7787952082723678,461
+Enter hypotenuse label,0.8570341092080223,15
+Enter leg label,0.8678772492071725,14
+Enter mean,0.907739863361873,66
+Enter median - even entries,0.7033758342352092,64
+Enter median - odd entries,0.9170512820512821,65
+Enter new mean,0.8798607744170553,45
+Enter new median,0.9271525717277725,45
+Enter number of desired outcomes from picture,0.7971929883290001,111
+Enter number of desired outcomes from verbal description,0.8850814063414194,110
+Enter number of entries,0.9073162416919169,66
+Enter number of outcomes for event 1 in table,0.9098206699503723,78
+Enter number of outcomes for event 1 in tool,0.8535093044697655,78
+Enter number of outcomes for event 2 in table,0.895271795837109,78
+Enter number of outcomes for event 2 in tool,0.9080816263508572,78
+Enter number of total outcomes from picture,0.893433398147497,111
+Enter number of total outcomes from verbal description,0.8789007443986457,110
+Enter number of total outcomes in table,0.9214596838558031,78
+Enter numerator of form of 1,0.7162703300192302,454
+Enter numerator of given fraction in proportion,0.3981525562167623,459
+Enter numerator of given rate in proportion,0.8582554350411494,462
+Enter numerator of given unit rate in proportion,0.6817778434243192,454
+Enter original mean,0.8280478058266679,45
+Enter original median,0.9291314943313865,45
+Enter part in proportion with variable,0.6562116680893267,462
+Enter percent probability of event,0.8853291999938057,111
+Enter probability of first event,0.7155067155067155,6
+Enter probability of second event,0.33235653235653234,6
+Enter proportion label in denominator,0.8984147000204132,463
+Enter proportion label in numerator,0.8025050092799041,464
+Enter range,0.8337117605741087,65
+Enter rate label in denominator,0.9075939492348161,470
+Enter rate label in numerator,0.8571846841017255,471
+"Enter rate label to left of ""per""",0.8545163719871826,470
+"Enter rate label to right of ""per""",0.7760797025389691,470
+Enter ratio label in denominator,0.6966935210059678,502
+Enter ratio label in numerator,0.7212093386685804,502
+"Enter ratio label to left of ""to""",0.8912997121925694,490
+Enter ratio label to left of colon,0.8501118730894646,498
+"Enter ratio label to right of ""to""",0.8963026464560206,489
+Enter ratio label to right of colon,0.8855655535103741,497
+"Enter ratio quantity to left of ""to""",0.9009399399736823,489
+Enter ratio quantity to left of colon,0.9032778524249857,499
+"Enter ratio quantity to right of ""to""",0.9584538104476754,489
+Enter ratio quantity to right of colon,0.9562384170724578,496
+Enter ratio using a colon,0.9118270811220243,495
+Enter second extreme in equation,0.9291434979944999,273
+Enter second mean in equation,0.838150729246986,275
+Enter single mode,0.9713541666666666,64
+Enter square of hypotenuse label,0.9788974019743251,13
+Enter square of leg label,0.8079176902386621,15
+Enter square root to tenths place,0.642045368823386,48
+Enter sum of entries,0.8292122136394015,66
+Enter theoretical probability,0.8320459981069784,89
+Enter total in proportion with variable,0.7420416912963639,459
+Entered desired mean,0.6339180394004955,18
+Entering a given,0.7725452570866514,1101
+Entering a point,0.5839681599854426,84
+"Entering slope, GLF",0.2089575293618373,77
+"Entering slope, SIF",0.6703859389827639,87
+Entering the slope,0.8067191481377063,253
+Entering the y-intercept,0.7264038618108123,255
+"Entering x-intercept, GLF",0.49844211516027187,78
+"Entering x-intercept, SIF",0.2515580979866694,63
+"Entering y-intercept, GLF",0.584562591153519,90
+"Entering y-intercept, SIF",0.7632422118657329,96
+FA-ROW1-INSIDE,0.7261350096234945,263
+FQ-FACTOR-ALREADY-ENTERED-PARTNER,0.7397480430649847,169
+"Find X, any form",0.563805775386077,1063
+"Find Y, any form",0.7480629262356469,1093
+Find hypotenuse in context,0.6723639455782313,14
+Find hypotenuse out of context,0.8272486772486772,12
+Find leg in context,0.6895833333333333,8
+Find leg out of context,0.9625,8
+Find negative square root,0.8646446844560052,53
+Find positive square root,0.9033412080581892,53
+Find square of given hypotenuse,0.9589015151515152,8
+Find square of given leg,0.913932078259299,13
+Find square of hypotenuse,0.8478337901414824,13
+Find square of leg,0.8618686868686869,8
+"Finding the intersection, GLF",0.6215853976270643,72
+"Finding the intersection, Mixed",0.5246711809211809,74
+"Finding the intersection, SIF",0.5346467695059245,71
+Finding the region,0.6381937298440357,41
+Full-Expression-Gla:Student-Modeling-Analysis,0.27383559263121304,137
+Identify Parent Curve,0.9518849206349207,7
+Identify Parent Description,0.8740562678062679,7
+Identify Parent Equation,0.8823743386243387,7
+Identify approximation as lower half,0.7980331262939958,46
+Identify approximation as upper half,0.6608333333333333,50
+Identify lower perfect square,0.4830511302423067,50
+Identify lower square root as tenths decimal,0.44976471940757656,49
+Identify lower square root as whole number,0.636946275946276,50
+Identify no more factors,0.801860136506748,170
+Identify that a fraction can/cannot be simplified,0.6741592102103757,502
+Identify upper perfect square,0.5381590909090909,50
+Identify upper square root as tenths decimal,0.6909643644337522,49
+Identify upper square root as whole number,0.6722167277167277,50
+Identifying units,0.7162241545345586,1103
+LCD-ROW-1,0.4196748591909882,31
+LCD-ROW-2,0.6764412901912902,30
+LCD-ROW-3,0.7968969483675367,29
+Labelling point of intersection,0.757480789885471,68
+Labelling the axes,0.7894395297702037,949
+MODELING RULE,0.815018255325087,684
+"Negative Constant, GLF",0.769171626984127,48
+"Negative Constant, SIF",0.7909477981556339,34
+PM-R-DEN,0.6015895739480644,265
+PM-R-NUM,0.23241551635712218,274
+PM-ROW-1,0.9078319477996416,259
+PM-ROW-1-COEFF,0.8771117101889667,293
+Placing coordinate point,0.6165490262358938,97
+Plot decimal - hundredths,0.5749666024080087,256
+Plot decimal - tenths,0.6781452658884566,257
+Plot decimal - thousandths,0.4152058432934927,251
+Plot imperfect radical,0.3691323169584039,253
+Plot non-terminating improper fraction,0.5969094304388421,255
+Plot non-terminating mixed number,0.6482190098261527,252
+Plot non-terminating proper fraction,0.5890400604686319,252
+Plot percent,0.4477409073865766,254
+Plot perfect radical,0.6109150326797386,255
+Plot pi,0.719631093544137,253
+Plot terminating improper fractions,0.3501532522538355,258
+Plot terminating mixed number,0.5284608804495168,264
+Plot terminating proper fraction,0.5853856646825397,256
+Plot whole number,0.9246744791666667,256
+"Positive Constants, GLF",0.6834388964543314,78
+"Positive Constants, SIF",0.6176046176046176,27
+Product-Expression-Gla:Student-Modeling-Analysis,0.8775483064892633,145
+QFT-A-FACTOR,0.822814248156714,73
+QFT-B-FACTOR,0.8245582043527249,73
+QFT-C-FACTOR,0.9036633457866334,73
+SF-ROW-1,0.8263110246424534,500
+SF-ROW-2,0.5948705548255572,393
+SF-ROW-2-COEFF,0.4492746233059471,518
+SF-ROW-2-COEFF-DO-ROW-1-DENOMINATOR-FIRST,0.4384974079418524,135
+SF-ROW-2-COEFF-DO-ROW-1-NUMERATOR-FIRST,0.5279530680196607,53
+SF-ROW-2-DO-ROW-1-DENOMINATOR-FIRST,0.45376325231397696,207
+SF-ROW-2-DO-ROW-1-NUMERATOR-FIRST,0.6489359984641292,95
+SF-ROW-2-DUPLICATE,0.5959062725805861,416
+SF-ROW-2-DUPLICATE-DO-ROW-1-DENOMINATOR-FIRST,0.9,50
+SF-ROW-2-DUPLICATE-DO-ROW-1-NUMERATOR-FIRST,0.6908866995073891,58
+SF-ROW-3,0.4715477034485918,607
+SF-ROW-3-DO-COMMON-FACTOR-FIRST,0.8114141254367376,150
+SF-ROW-3-DO-ROW-1-DENOMINATOR-FIRST,0.5702631041258539,261
+SF-ROW-3-DO-ROW-1-NUMERATOR-FIRST,0.6445064568271397,124
+Select dependence,0.7985022470622992,78
+Select first event,0.9060467310467311,78
+Select number of modes,0.8633430720804092,65
+Select second event,0.9908216783216783,78
+Setting the slope,0.5390585935666514,249
+Setting the y-intercept,0.6281211398873756,251
+Shading greater than,0.4589062375203598,74
+Shading less than,0.4553169910615058,69
+Solve for negative data value,0.8571428571428571,14
+Solve for positive data value,0.6614583333333334,16
+Sum-Expression-Gla:Student-Modeling-Analysis,0.8295776678643811,143
+Variable-Expression-Gla:Student-Modeling-Analysis,0.9101602712598386,148
+Write base of exponential from given fraction,0.7597444655232968,160
+Write base of exponential from given fraction as product,0.9148254822083736,160
+Write base of exponential from given whole number,0.9062659453835925,165
+Write base of exponential from given whole number as product,0.9637491495149786,164
+Write decimal multiplier from given number,0.8350872302456602,146
+Write decimal multiplier from given scientific notation,0.9481107804436797,147
+Write decimal multiplier of scientific notation,0.934543063003629,147
+"Write expression, any form",0.4179867560528119,1087
+Write fraction from given exponential,0.6502518012666347,159
+Write fraction from given number as product,0.6798566868195198,159
+Write given square as whole number,0.8205773262377036,53
+Write given whole number as square,0.7146900269541778,53
+Write negative exponent of exponential from given number,0.7075229192247381,160
+Write negative exponent of scientific notation,0.8118658645188028,133
+Write negative power of ten from given number,0.6963305297493693,134
+Write negative power of ten from given scientific notation,0.7960532647589501,132
+Write number from negative exponent,0.7971878752533412,133
+Write number from positive exponent,0.7708603124466792,152
+Write positive exponent of exponential from given number,0.88195489702166,163
+Write positive exponent of scientific notation,0.8534077210545917,152
+Write positive power of ten from given number,0.7116938192083251,151
+Write positive power of ten from given scientific notation,0.8041574758584169,151
+Write whole number from given exponential,0.7520688576240439,163
+Write whole number from given number as product,0.8413023535453782,164
+Write whole number multiplier from given number,0.9061667951993462,151
+Write whole number multiplier from given scientific notation,0.9310635206773002,151
+Write whole number multiplier of scientific notation,0.9403682214679201,151
+combine-like-terms-sp,0.6700577457446796,991
+combine-like-terms-whole-sp,0.6215836526181353,261
+distribute-sp,0.7460830280003746,517
+factor-quadratic-sp,0.6969226081542322,170
+factor-sp,0.7744348997330701,254
+lcd-sp,0.806547619047619,20
+perform-mult-r-sp,0.5051418439716312,94
+perform-mult-row2-sp,0.8477107999700957,856
+perform-mult-sp,0.8391187352643247,227
+perform-mult-whole-sp,0.5473727422003284,290
+qft-den-sp,0.7918439500756411,116
+qft-num1-sp,0.7497559833956893,116
+qft-num2-sp,0.6338199677829495,116
+simplify-fractions-sp,0.5134453979021816,680
+unknown bug element,0.0,347
+unspecified,0.9997935164154449,167

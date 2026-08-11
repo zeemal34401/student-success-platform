@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+
+# Database
+server/data/*.db
+server/data/*.db-*
+
+# Build
+dist/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python ML services
+ml/**/.venv/
+ml/**/__pycache__/
+ml/**/*.pyc
+ml/datasets/

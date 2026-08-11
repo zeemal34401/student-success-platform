@@ -1,0 +1,19 @@
+=== xAPI-Edu-Data Model - Final Report ===
+
+Best hyperparameters: {'learning_rate': 0.05, 'max_depth': 4, 'n_estimators': 100}
+5-Fold CV ROC-AUC: 0.9547 +/- 0.0131
+Held-out Test ROC-AUC: 0.9915
+
+XGBoost Classification Report:
+              precision    recall  f1-score   support
+
+           0       0.88      0.92      0.90        25
+           1       0.97      0.96      0.96        71
+
+    accuracy                           0.95        96
+   macro avg       0.93      0.94      0.93        96
+weighted avg       0.95      0.95      0.95        96
+
+Confusion Matrix:
+[[23  2]
+ [ 3 68]]

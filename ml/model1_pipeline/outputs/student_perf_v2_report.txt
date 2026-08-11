@@ -1,0 +1,25 @@
+=== UCI Student Performance Model 1 v2 - Improved Report ===
+
+Best model selected: XGBoost (tuned)
+Best hyperparameters (if XGBoost): {'learning_rate': 0.1, 'max_depth': 5, 'min_child_weight': 1, 'n_estimators': 300}
+Optimal decision threshold: 0.74
+ROC-AUC: 0.7491
+
+Classification Report (at tuned threshold):
+              precision    recall  f1-score   support
+
+           0       0.44      0.61      0.51        46
+           1       0.88      0.78      0.82       163
+
+    accuracy                           0.74       209
+   macro avg       0.66      0.69      0.67       209
+weighted avg       0.78      0.74      0.76       209
+
+Confusion Matrix:
+[[ 28  18]
+ [ 36 127]]
+
+=== Model Comparison ===
+XGBoost (tuned): AUC=0.7491, Macro F1=0.6589
+Logistic Regression: AUC=0.7278, Macro F1=0.6140
+Random Forest: AUC=0.7395, Macro F1=0.6375

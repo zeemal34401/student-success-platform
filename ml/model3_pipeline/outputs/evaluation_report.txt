@@ -1,0 +1,17 @@
+=== Model 3 (Intervention Recommender) - Evaluation Report ===
+
+Model type: Rule-based recommender (not a classifier)
+Note: Traditional classification accuracy does not apply. Metrics below measure
+how well top-5 skill recommendations match each student's weak skills.
+
+Dataset: student_kc_mastery.csv (KDD Cup Algebra 2006-2007, filtered KCs)
+Weak-skill definition: mastery_rate < 0.6 and attempts >= 3
+Priority score: 0.7 × (1 − personal mastery) + 0.3 × (1 − class avg mastery)
+
+Students with weak skills:     1,202
+Students with recommendations: 1,202
+Coverage:                      100.0%
+
+Precision@5:                   100.00%
+Recall@5:                      68.17%
+Top-1 ranking accuracy:        98.84%

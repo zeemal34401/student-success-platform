@@ -1,0 +1,49 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET:-change-this-to-a-long-random-secret-for-docker-dev-only}
+      CORS_ORIGIN: http://localhost:5173
+      ML_ACADEMIC_API_URL: http://ml-academic:8000
+      ML_DROPOUT_API_URL: http://ml-dropout:8001
+      ML_RECOMMENDER_API_URL: http://ml-recommender:8002
+      ML_ANALYTICS_API_URL: http://ml-analytics:8003
+    depends_on:
+      - ml-academic
+      - ml-dropout
+      - ml-recommender
+      - ml-analytics
+
+  ml-academic:
+    build:
+      context: ./ml/model1_pipeline
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+
+  ml-dropout:
+    build:
+      context: ./ml/model2_pipeline
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+
+  ml-recommender:
+    build:
+      context: ./ml/model3_pipeline
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+
+  ml-analytics:
+    build:
+      context: ./ml/model4_pipeline
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
