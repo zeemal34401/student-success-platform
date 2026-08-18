@@ -220,6 +220,7 @@ export function seedDatabase({ force = false } = {}) {
       'recommendation_decisions',
       'user_notification_preferences',
       'faculty_courses',
+      'student_courses',
       'student_metrics',
       'students',
       'intervention_templates',
@@ -233,7 +234,12 @@ export function seedDatabase({ force = false } = {}) {
       'roles',
     ]
     db.exec('PRAGMA foreign_keys = OFF')
-    for (const table of tables) db.exec(`DELETE FROM ${table}`)
+    for (const table of tables) {
+      const exists = db.prepare(
+        `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`,
+      ).get(table)
+      if (exists) db.exec(`DELETE FROM ${table}`)
+    }
     db.exec('PRAGMA foreign_keys = ON')
   }
 
@@ -350,6 +356,10 @@ export function seedDatabase({ force = false } = {}) {
       INSERT INTO students (id, name, course_id, department_id)
       VALUES (?, ?, ?, ?)
     `)
+    const insertStudentCourse = db.prepare(`
+      INSERT OR IGNORE INTO student_courses (student_id, course_id, term_id)
+      VALUES (?, ?, ?)
+    `)
     const insertMetrics = db.prepare(`
       INSERT INTO student_metrics
         (student_id, term_id, attendance, gpa, lms_activity, late_assignments, risk_score, risk_level, trend)
@@ -357,12 +367,14 @@ export function seedDatabase({ force = false } = {}) {
     `)
 
     for (const student of STUDENTS) {
+      const courseId = courseCache.get(student.course)
       insertStudent.run(
         student.id,
         student.name,
-        courseCache.get(student.course),
+        courseId,
         deptMap[student.department],
       )
+      insertStudentCourse.run(student.id, courseId, termId)
       insertMetrics.run(
         student.id,
         termId,

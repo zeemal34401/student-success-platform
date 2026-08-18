@@ -5,6 +5,7 @@ import dashboardRoutes from './dashboard.routes.js'
 import reportsRoutes from './reports.routes.js'
 import recommendationsRoutes from './recommendations.routes.js'
 import adminRoutes from './admin.routes.js'
+import searchRoutes from './search.routes.js'
 import settingsRoutes from './settings.routes.js'
 import { asyncHandler, sendSuccess } from '../utils/response.js'
 import { checkMlServicesHealth } from '../services/mlPrediction.service.js'
@@ -48,6 +49,7 @@ router.use('/dashboard', dashboardRoutes)
 router.use('/reports', reportsRoutes)
 router.use('/recommendations', recommendationsRoutes)
 router.use('/admin', adminRoutes)
+router.use('/search', searchRoutes)
 router.use('/settings', settingsRoutes)
 
 export default router

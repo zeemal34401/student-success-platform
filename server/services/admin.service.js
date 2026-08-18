@@ -21,6 +21,35 @@ function assertEmailDeliveryReady() {
   }
 }
 
+// Role groups used to simplify the hierarchy logic.
+// In this system, Director can manage everything below, while Admin (and Administrative Staff) can manage faculty roles.
+const ADMIN_GROUP = new Set([ROLES.ADMIN, ROLES.STAFF])
+const FACULTY_GROUP = new Set([ROLES.FACULTY, ROLES.DEPARTMENT_HEAD])
+
+function assertActorCanManageUser(actorUser, targetRole) {
+  if (!actorUser?.role) {
+    throw new AppError('Authentication required', 401, 'UNAUTHORIZED')
+  }
+
+  // Director/Dean: can manage any user below Executive Leadership.
+  if (actorUser.role === ROLES.DIRECTOR) {
+    if (!ADMIN_GROUP.has(targetRole) && !FACULTY_GROUP.has(targetRole)) {
+      throw new AppError('Insufficient permissions', 403, 'FORBIDDEN')
+    }
+    return
+  }
+
+  // Academic Admin + Administrative Staff: can manage faculty roles only.
+  if (ADMIN_GROUP.has(actorUser.role)) {
+    if (!FACULTY_GROUP.has(targetRole)) {
+      throw new AppError('Insufficient permissions', 403, 'FORBIDDEN')
+    }
+    return
+  }
+
+  throw new AppError('Insufficient permissions', 403, 'FORBIDDEN')
+}
+
 function createInviteToken() {
   const rawToken = crypto.randomBytes(32).toString('hex')
   const expiresAt = new Date(Date.now() + env.inviteExpiryHours * 60 * 60 * 1000).toISOString()
@@ -236,6 +265,8 @@ export async function createAdminUser(payload, invitedByUser = null) {
   const roleRow = db.prepare('SELECT id FROM roles WHERE name = ?').get(payload.role)
   if (!roleRow) throw new AppError('Invalid role', 400, 'INVALID_ROLE')
 
+  assertActorCanManageUser(invitedByUser, payload.role)
+
   if (!payload.name?.trim() || !payload.email?.trim()) {
     throw new AppError('Name and email are required', 400, 'VALIDATION_ERROR')
   }
@@ -287,13 +318,24 @@ export async function createAdminUser(payload, invitedByUser = null) {
   }
 }
 
-export async function updateAdminUser(userId, payload) {
+export async function updateAdminUser(userId, payload, invitedByUser = null) {
   const db = getDb()
-  const existing = db.prepare('SELECT id, email FROM users WHERE id = ?').get(userId)
+  const existing = db
+    .prepare(
+      `
+      SELECT u.id, u.email, r.name AS role_name
+      FROM users u
+      JOIN roles r ON r.id = u.role_id
+      WHERE u.id = ?
+    `,
+    )
+    .get(userId)
   if (!existing) throw new AppError('User not found', 404, 'USER_NOT_FOUND')
 
   const roleRow = db.prepare('SELECT id FROM roles WHERE name = ?').get(payload.role)
   if (!roleRow) throw new AppError('Invalid role', 400, 'INVALID_ROLE')
+
+  assertActorCanManageUser(invitedByUser, payload.role)
 
   if (!payload.name?.trim() || !payload.email?.trim()) {
     throw new AppError('Name and email are required', 400, 'VALIDATION_ERROR')
@@ -358,13 +400,26 @@ export async function resendInvite(userId, invitedByUser = null) {
     throw new AppError('This account is already active', 400, 'ALREADY_ACTIVE')
   }
 
+  assertActorCanManageUser(invitedByUser, user.role_name)
+
   return issueAndSendInvite(userId, invitedByUser)
 }
 
-export function toggleAdminUserStatus(userId) {
+export function toggleAdminUserStatus(userId, invitedByUser = null) {
   const db = getDb()
-  const user = db.prepare('SELECT id, status FROM users WHERE id = ?').get(userId)
+  const user = db
+    .prepare(
+      `
+      SELECT u.id, u.status, r.name AS role_name
+      FROM users u
+      JOIN roles r ON r.id = u.role_id
+      WHERE u.id = ?
+    `,
+    )
+    .get(userId)
   if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND')
+
+  assertActorCanManageUser(invitedByUser, user.role_name)
 
   let nextStatus
   if (user.status === 'Disabled') nextStatus = 'Active'
@@ -383,8 +438,21 @@ export function toggleAdminUserStatus(userId) {
   return loadAdminUser(userId)
 }
 
-export function deleteAdminUser(userId) {
+export function deleteAdminUser(userId, invitedByUser = null) {
   const db = getDb()
+  const userRole = db
+    .prepare(
+      `
+      SELECT r.name AS role_name
+      FROM users u
+      JOIN roles r ON r.id = u.role_id
+      WHERE u.id = ?
+    `,
+    )
+    .get(userId)
+  if (!userRole) throw new AppError('User not found', 404, 'USER_NOT_FOUND')
+  assertActorCanManageUser(invitedByUser, userRole.role_name)
+
   const result = db.prepare('DELETE FROM users WHERE id = ?').run(userId)
   if (result.changes === 0) throw new AppError('User not found', 404, 'USER_NOT_FOUND')
   return { id: userId }

@@ -1,6 +1,22 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { getDb } from '../db/connection.js'
 import { loadUserById } from './auth.service.js'
 import { AppError } from '../utils/response.js'
+
+const avatarsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../data/avatars')
+const MAX_AVATAR_BYTES = 500_000
+const DATA_URL_PATTERN = /^data:image\/jpeg;base64,([A-Za-z0-9+/=\s]+)$/
+
+function avatarFilename(userId) {
+  return `${String(userId).replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`
+}
+
+function withUser(userId) {
+  const settings = getSettings(userId)
+  return { ...settings, user: loadUserById(userId) }
+}
 
 export function getSettings(userId) {
   const db = getDb()
@@ -22,6 +38,9 @@ export function getSettings(userId) {
       name: user.name,
       email: user.email,
       role: user.role,
+      department: user.department ?? 'Institution-wide',
+      status: user.status,
+      avatarUrl: user.avatarUrl,
     },
     notifications: {
       criticalAlerts: Boolean(prefs?.critical_alerts ?? 1),
@@ -31,22 +50,55 @@ export function getSettings(userId) {
   }
 }
 
-export function updateProfile(userId, { name, email }) {
-  const db = getDb()
-  if (!name?.trim() || !email?.trim()) {
-    throw new AppError('Name and email are required', 400, 'VALIDATION_ERROR')
+export function updateProfile() {
+  throw new AppError(
+    'Account details cannot be changed from Settings. Contact an administrator.',
+    403,
+    'PROFILE_LOCKED',
+  )
+}
+
+export function updateAvatar(userId, image) {
+  const user = loadUserById(userId)
+  if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND')
+
+  const match = typeof image === 'string' ? image.trim().match(DATA_URL_PATTERN) : null
+  if (!match) {
+    throw new AppError('Upload a JPEG photo (JPG).', 400, 'INVALID_IMAGE')
   }
 
-  const conflict = db
-    .prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE AND id != ?')
-    .get(email.trim(), userId)
-  if (conflict) throw new AppError('Email already in use', 409, 'EMAIL_EXISTS')
+  const buffer = Buffer.from(match[1].replace(/\s+/g, ''), 'base64')
+  if (!buffer.length || buffer[0] !== 0xff || buffer[1] !== 0xd8) {
+    throw new AppError('Upload a valid JPEG photo.', 400, 'INVALID_IMAGE')
+  }
+  if (buffer.length > MAX_AVATAR_BYTES) {
+    throw new AppError('Photo must be smaller than 500 KB.', 400, 'IMAGE_TOO_LARGE')
+  }
 
-  db.prepare(
-    `UPDATE users SET name = ?, email = ?, updated_at = datetime('now') WHERE id = ?`,
-  ).run(name.trim(), email.trim(), userId)
+  fs.mkdirSync(avatarsDir, { recursive: true })
+  const filename = avatarFilename(userId)
+  fs.writeFileSync(path.join(avatarsDir, filename), buffer)
 
-  return getSettings(userId)
+  const publicUrl = `/api/uploads/avatars/${filename}`
+  getDb()
+    .prepare(`UPDATE users SET avatar_url = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(publicUrl, userId)
+
+  return withUser(userId)
+}
+
+export function removeAvatar(userId) {
+  const user = loadUserById(userId)
+  if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND')
+
+  const filePath = path.join(avatarsDir, avatarFilename(userId))
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+
+  getDb()
+    .prepare(`UPDATE users SET avatar_url = NULL, updated_at = datetime('now') WHERE id = ?`)
+    .run(userId)
+
+  return withUser(userId)
 }
 
 export function updateNotifications(userId, notifications) {

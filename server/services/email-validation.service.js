@@ -1,5 +1,6 @@
 import dns from 'node:dns/promises'
 import net from 'node:net'
+import crypto from 'node:crypto'
 import { Resolver } from 'node:dns/promises'
 import { AppError } from '../utils/response.js'
 import { env } from '../config/env.js'
@@ -7,7 +8,6 @@ import { env } from '../config/env.js'
 const EMAIL_REGEX =
   /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i
 
-/** Common disposable / throwaway domains rejected for industrial accounts */
 const DISPOSABLE_DOMAINS = new Set([
   'mailinator.com',
   'guerrillamail.com',
@@ -20,6 +20,20 @@ const DISPOSABLE_DOMAINS = new Set([
   'getnada.com',
   'maildrop.cc',
 ])
+
+const PLACEHOLDER_DOMAINS = new Set([
+  'example.com',
+  'example.org',
+  'example.net',
+  'test.com',
+  'test.org',
+  'localhost',
+  'invalid.com',
+  'email.com',
+  'mail.com',
+])
+
+const EMAIL_NOT_FOUND_MESSAGE = 'This email does not exist. Enter a valid email address.'
 
 function normalizeEmail(email) {
   return String(email ?? '').trim().toLowerCase()
@@ -57,10 +71,6 @@ async function resolveMxRecords(domain) {
   throw lastError ?? new Error('No MX records')
 }
 
-/**
- * Probe recipient MX with SMTP RCPT TO.
- * Returns: 'valid' | 'invalid' | 'unknown'
- */
 function probeMailbox(email, mxHost, timeoutMs = 8000) {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host: mxHost, port: 25 })
@@ -107,7 +117,7 @@ function probeMailbox(email, mxHost, timeoutMs = 8000) {
             return
           }
           step = 1
-          send(`EHLO studentsuccess.local`)
+          send('EHLO studentsuccess.local')
           continue
         }
 
@@ -120,7 +130,7 @@ function probeMailbox(email, mxHost, timeoutMs = 8000) {
           if (line.startsWith('250-')) continue
           if (code !== 250) continue
           step = 2
-          send(`MAIL FROM:<noreply@studentsuccess.local>`)
+          send('MAIL FROM:<noreply@studentsuccess.local>')
           continue
         }
 
@@ -139,7 +149,7 @@ function probeMailbox(email, mxHost, timeoutMs = 8000) {
           clearTimeout(timer)
           send('QUIT')
           if (code === 250 || code === 251) finish('valid')
-          else if (code === 550 || code === 551 || code === 553 || code === 554) finish('invalid')
+          else if (code === 550 || code === 551 || code === 552 || code === 553 || code === 554) finish('invalid')
           else finish('unknown')
         }
       }
@@ -147,10 +157,24 @@ function probeMailbox(email, mxHost, timeoutMs = 8000) {
   })
 }
 
+async function probeMailboxOnHosts(email, mxRecords, timeoutMs) {
+  const hosts = [...mxRecords].sort((a, b) => a.priority - b.priority).slice(0, 3)
+  let sawUnknown = false
+
+  for (const record of hosts) {
+    const result = await probeMailbox(email, record.exchange, timeoutMs)
+    if (result === 'invalid') return 'invalid'
+    if (result === 'valid') return 'valid'
+    sawUnknown = true
+  }
+
+  return sawUnknown ? 'unknown' : 'unknown'
+}
+
 /**
- * Validates that an email is well-formed and can receive mail.
- * Rejects invalid formats, disposable domains, domains without MX, and
- * mailboxes that SMTP servers confirm do not exist.
+ * Validates that an email is well-formed and that the mailbox exists.
+ * Rejects invalid formats, disposable/placeholder domains, domains without MX,
+ * and mailboxes that the receiving server says do not exist.
  */
 export async function assertDeliverableEmail(rawEmail) {
   const email = normalizeEmail(rawEmail)
@@ -160,57 +184,39 @@ export async function assertDeliverableEmail(rawEmail) {
   }
 
   const domain = email.split('@')[1]
-  if (!domain || DISPOSABLE_DOMAINS.has(domain)) {
-    throw new AppError(
-      'Enter a valid professional work email. Disposable addresses are not allowed.',
-      400,
-      'INVALID_EMAIL',
-    )
+  if (!domain || DISPOSABLE_DOMAINS.has(domain) || PLACEHOLDER_DOMAINS.has(domain)) {
+    throw new AppError(EMAIL_NOT_FOUND_MESSAGE, 400, 'EMAIL_NOT_FOUND')
   }
 
   let mxRecords
   try {
     mxRecords = await resolveMxRecords(domain)
   } catch {
-    throw new AppError(
-      'The entered email does not exist or its domain cannot receive mail. Enter a valid email.',
-      400,
-      'EMAIL_NOT_FOUND',
-    )
+    throw new AppError(EMAIL_NOT_FOUND_MESSAGE, 400, 'EMAIL_NOT_FOUND')
   }
 
   if (!Array.isArray(mxRecords) || mxRecords.length === 0) {
-    throw new AppError(
-      'The entered email does not exist or its domain cannot receive mail. Enter a valid email.',
-      400,
-      'EMAIL_NOT_FOUND',
-    )
+    throw new AppError(EMAIL_NOT_FOUND_MESSAGE, 400, 'EMAIL_NOT_FOUND')
   }
 
   mxRecords.sort((a, b) => a.priority - b.priority)
 
-  if (env.email.verifyMode === 'mx') {
-    return { email, verifiedBy: 'mx' }
-  }
-
-  const host = mxRecords[0].exchange
-  const probe = await probeMailbox(email, host, env.email.verifyTimeoutMs)
+  const timeoutMs = env.email.verifyTimeoutMs
+  const probe = await probeMailboxOnHosts(email, mxRecords, timeoutMs)
 
   if (probe === 'invalid') {
-    throw new AppError(
-      'The entered email does not exist. Enter a valid email address.',
-      400,
-      'EMAIL_NOT_FOUND',
-    )
+    throw new AppError(EMAIL_NOT_FOUND_MESSAGE, 400, 'EMAIL_NOT_FOUND')
   }
 
-  if (probe === 'unknown' && env.email.verifyStrict) {
-    throw new AppError(
-      'Unable to verify that this email exists. Enter a valid, reachable work email.',
-      400,
-      'EMAIL_UNVERIFIED',
-    )
+  if (probe === 'valid') {
+    const decoyLocal = `no-mailbox-${crypto.randomBytes(8).toString('hex')}`
+    const decoy = await probeMailboxOnHosts(`${decoyLocal}@${domain}`, mxRecords, timeoutMs)
+    if (decoy === 'invalid') {
+      return { email, verifiedBy: 'smtp', mailboxConfirmed: true }
+    }
+    // Catch-all: the server accepts addresses that do not exist.
+    throw new AppError(EMAIL_NOT_FOUND_MESSAGE, 400, 'EMAIL_NOT_FOUND')
   }
 
-  return { email, verifiedBy: probe === 'valid' ? 'smtp' : 'mx' }
+  throw new AppError(EMAIL_NOT_FOUND_MESSAGE, 400, 'EMAIL_NOT_FOUND')
 }

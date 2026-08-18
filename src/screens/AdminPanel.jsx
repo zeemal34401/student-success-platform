@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CheckCircle2,
+  GraduationCap,
   Mail,
   MoreHorizontal,
   Pencil,
@@ -26,15 +27,53 @@ import {
 import { ROLES, NO_DEPARTMENT_ROLES, ROLE_HIERARCHY } from '../constants/roles'
 import { api } from '../api/client'
 
-const ROLE_OPTIONS = ROLE_HIERARCHY
-const ROLE_FILTERS = ['All', ...ROLE_OPTIONS]
+const DEFAULT_ROLE_OPTIONS = ROLE_HIERARCHY
 const STATUS_FILTERS = ['All', 'Active', 'Invited', 'Disabled']
+const LIST_PANEL =
+  'mt-6 overflow-hidden rounded-xl border border-[#CDD6E4] bg-[#E8EEF6] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]'
 
-function emptyUserForm(departments = []) {
+function RoleOnOffSwitch({ offValue, onValue, value, onChange }) {
+  const options = [
+    { value: offValue, icon: GraduationCap },
+    { value: onValue, icon: Users },
+  ]
+
+  return (
+    <div
+      role="group"
+      aria-label="Role"
+      className="inline-grid grid-cols-2 rounded-full bg-[#2C3546] p-1 shadow-[0_10px_24px_rgba(44,53,70,0.32)] ring-1 ring-black/10"
+    >
+      {options.map((option) => {
+        const selected = value === option.value
+        const Icon = option.icon
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(option.value)}
+            className={[
+              'inline-flex min-w-[8.75rem] items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white',
+              selected
+                ? 'bg-primary-600 text-white shadow-md'
+                : 'bg-transparent text-white/55 hover:text-white',
+            ].join(' ')}
+          >
+            <Icon size={15} className="shrink-0" aria-hidden="true" />
+            {option.value}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function emptyUserForm(departments = [], defaultRole = ROLES.FACULTY) {
   return {
     name: '',
     email: '',
-    role: ROLES.FACULTY,
+    role: defaultRole,
     department: departments[0] ?? 'Computer Science',
     courses: [],
   }
@@ -45,6 +84,7 @@ function RoleBadge({ role }) {
   const isAdmin = role === ROLES.ADMIN
   const isHead = role === ROLES.DEPARTMENT_HEAD
   const isStaff = role === ROLES.STAFF
+  const isStudent = role === ROLES.STUDENT
 
   return (
     <span
@@ -58,7 +98,9 @@ function RoleBadge({ role }) {
               ? 'border-primary-100 bg-primary-50 text-primary-700'
               : isStaff
                 ? 'border-[#B2DDFF] bg-[#EFF8FF] text-[#175CD3]'
-                : 'border-[#D0D5DD] bg-[#F2F4F7] text-[#475467]',
+                : isStudent
+                  ? 'border-primary-100 bg-primary-50 text-primary-700'
+                  : 'border-[#D0D5DD] bg-[#F2F4F7] text-[#475467]',
       ].join(' ')}
     >
       {role}
@@ -107,7 +149,7 @@ function ActionsMenu({ account, onEdit, onToggleStatus, onResendInvite, onRemove
             </button>
           )}
           {canToggle && (
-            <button type="button" role="menuitem" onClick={() => { onToggleStatus(account.id); onClose() }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary hover:bg-background">
+            <button type="button" role="menuitem" onClick={() => { onToggleStatus(account); onClose() }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-primary hover:bg-background">
               <Shield size={14} aria-hidden="true" /> {toggleLabel}
             </button>
           )}
@@ -124,6 +166,12 @@ function inviteErrorMessage(err) {
   const code = err?.code
   const message = err?.message ?? 'Unable to complete request'
 
+  if (code === 'FORBIDDEN') {
+    return 'You must be logged in as Academic Admin to invite users.'
+  }
+  if (code === 'UNAUTHORIZED') {
+    return 'Please log in again (session expired).'
+  }
   if (code === 'EMAIL_NOT_CONFIGURED') {
     return message
   }
@@ -139,26 +187,36 @@ function inviteErrorMessage(err) {
   if (code === 'TIMEOUT') {
     return 'The invitation request timed out while verifying email or contacting SMTP. Try again.'
   }
+  if (code === 'INVALID_COURSE' || code === 'COURSES_REQUIRED' || code === 'INVALID_DEPARTMENT') {
+    return message || 'Choose a valid department and course for this student.'
+  }
   return message
 }
 
 function InviteSuccessModal({ result, onClose }) {
   if (!result) return null
 
-  const { user, invite } = result
+  const { user, invite, added } = result
   const deliveredTo = invite?.email?.to ?? user.workEmail ?? user.email
+  const isStudent = added || user?.role === ROLES.STUDENT
 
   return (
     <Modal
       isOpen={Boolean(result)}
       onClose={onClose}
-      title="Invitation emailed"
-      description="The activation link was sent only to their work inbox. No invite links are shown in the admin console."
+      title={isStudent ? 'Student added' : 'Invitation emailed'}
+      description={
+        isStudent
+          ? 'The student is on the roster immediately, enrolled in the selected courses. No invitation email is sent.'
+          : 'The activation link was sent only to their work inbox. No invite links are shown in the admin console.'
+      }
     >
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-background px-4 py-3">
           <p className="text-sm font-semibold text-text-primary">{user.name}</p>
-          <p className="mt-1 text-sm text-text-secondary">{user.workEmail ?? user.email}</p>
+          {!isStudent && (
+            <p className="mt-1 text-sm text-text-secondary">{user.workEmail ?? user.email}</p>
+          )}
           <p className="mt-2 text-xs text-text-muted">
             {user.role}
             {user.department && user.department !== 'Institution-wide' ? ` · ${user.department}` : ''}
@@ -170,8 +228,16 @@ function InviteSuccessModal({ result, onClose }) {
           <p className="inline-flex items-start gap-2">
             <CheckCircle2 size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
             <span>
-              Activation email delivered to <strong>{deliveredTo}</strong>. They open the link from that inbox,
-              set a password, and their account activates automatically.
+              {isStudent ? (
+                <>
+                  <strong>{user.name}</strong> is now enrolled and visible on academic dashboards.
+                </>
+              ) : (
+                <>
+                  Activation email delivered to <strong>{deliveredTo}</strong>. They open the link from that inbox,
+                  set a password, and their account activates automatically.
+                </>
+              )}
             </span>
           </p>
           {invite?.expiresAt && (
@@ -195,6 +261,7 @@ function UserFormModal({
   form,
   departments,
   courseOptions,
+  roleOptions = DEFAULT_ROLE_OPTIONS,
   onChange,
   onSubmit,
   onClose,
@@ -204,17 +271,19 @@ function UserFormModal({
   onEmailBlur,
 }) {
   const isEdit = mode === 'edit'
+  const isStudent = form.role === ROLES.STUDENT
   const requiresDepartment = !NO_DEPARTMENT_ROLES.has(form.role)
-  const requiresCourses = form.role === ROLES.FACULTY
+  const requiresCourses = form.role === ROLES.FACULTY || isStudent
   const departmentOptions = departments.length > 0 ? departments : ['Computer Science']
   const availableCourses = (courseOptions ?? []).filter((c) => c.department === form.department)
 
   function handleSubmit(event) {
     event.preventDefault()
-    if (!form.name.trim() || !form.email.trim()) return
+    if (!form.name.trim()) return
+    if (!isStudent && !form.email.trim()) return
     if (requiresDepartment && !form.department) return
     if (requiresCourses && (!form.courses || form.courses.length === 0)) return
-    if (emailStatus === 'invalid') return
+    if (!isStudent && emailStatus === 'invalid') return
     onSubmit()
   }
 
@@ -232,17 +301,21 @@ function UserFormModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={isEdit ? 'Edit user account' : 'Invite new user'}
+      title={isEdit ? (isStudent ? 'Edit student' : 'Edit user account') : isStudent ? 'Add student' : 'Invite new user'}
       description={
         isEdit
-          ? 'Update account details and course assignments.'
-          : 'Enter a real work email. The system verifies it can receive mail, then emails the activation link directly to that inbox.'
+          ? isStudent
+            ? 'Update the student name, department, and enrolled courses.'
+            : 'Update account details and course assignments.'
+          : isStudent
+            ? 'Students are added to the roster immediately. Tick every course they are enrolled in — no invitation email is sent.'
+            : 'Enter a real work email. The system verifies it can receive mail, then emails the activation link directly to that inbox.'
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {formError && (
           <div className="rounded-lg border border-risk-critical-border bg-risk-critical-bg px-3 py-2.5 text-sm text-risk-critical" role="alert">
-            <p className="font-medium">Invitation could not be sent</p>
+            <p className="font-medium">{isStudent ? 'Student could not be saved' : 'Invitation could not be sent'}</p>
             <p className="mt-1">{formError}</p>
           </div>
         )}
@@ -250,6 +323,7 @@ function UserFormModal({
           <label htmlFor="user-name" className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-secondary">Full name</label>
           <input id="user-name" type="text" value={form.name} onChange={(e) => onChange((f) => ({ ...f, name: e.target.value }))} className="input-field w-full" required autoComplete="name" />
         </div>
+        {!isStudent && (
         <div>
           <label htmlFor="user-email" className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-secondary">
             Professional work email
@@ -276,21 +350,23 @@ function UserFormModal({
           >
             {emailStatus === 'checking' && 'Verifying that this email exists and can receive mail…'}
             {emailStatus === 'valid' && 'Email verified — activation will be sent to this address.'}
-            {emailStatus === 'invalid' && 'Enter a valid email that exists and can receive mail.'}
-            {!emailStatus && 'Must be a real mailbox. Fake or unreachable addresses are rejected.'}
+            {emailStatus === 'invalid' && (formError || 'This email does not exist. Enter a valid email address.')}
+            {!emailStatus && 'Must be a real mailbox. Addresses that do not exist are rejected.'}
           </p>
         </div>
+        )}
         <div>
           <label htmlFor="user-role" className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-text-secondary">Role</label>
           <select
             id="user-role"
             value={form.role}
-            onChange={(e) => {
+              onChange={(e) => {
               const role = e.target.value
               onChange((f) => ({
                 ...f,
                 role,
-                courses: role === ROLES.FACULTY ? (f.courses ?? []) : [],
+                courses:
+                  role === ROLES.FACULTY || role === ROLES.STUDENT ? (f.courses ?? []) : [],
                 department: NO_DEPARTMENT_ROLES.has(role)
                   ? 'Institution-wide'
                   : f.department === 'Institution-wide'
@@ -300,7 +376,7 @@ function UserFormModal({
             }}
             className="input-field w-full"
           >
-            {ROLE_OPTIONS.map((role) => (
+            {roleOptions.map((role) => (
               <option key={role} value={role}>{role}</option>
             ))}
           </select>
@@ -324,27 +400,40 @@ function UserFormModal({
         {requiresCourses && (
           <div>
             <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-text-secondary">
-              Assigned courses <span className="normal-case text-text-muted">(required)</span>
+              {isStudent ? 'Enrolled courses' : 'Assigned courses'}{' '}
+              <span className="normal-case text-text-muted">(required)</span>
             </p>
             {availableCourses.length === 0 ? (
               <p className="text-sm text-text-muted">No courses found for this department.</p>
             ) : (
-              <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border border-border bg-background p-3">
+              <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-border bg-background p-2">
                 {availableCourses.map((course) => {
                   const checked = (form.courses ?? []).includes(course.name)
                   return (
-                    <label key={course.name} className="flex items-center gap-2 text-sm text-text-primary">
+                    <label
+                      key={course.name}
+                      className={[
+                        'flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors',
+                        checked ? 'bg-primary-50 text-primary-800' : 'text-text-primary hover:bg-[#F9FAFB]',
+                      ].join(' ')}
+                    >
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleCourse(course.name)}
+                        className="h-4 w-4 accent-primary-600"
                       />
-                      <span>{course.name}</span>
+                      <span className="font-medium">{course.name}</span>
                     </label>
                   )
                 })}
               </div>
             )}
+            <p className="mt-1.5 text-xs text-text-muted">
+              {isStudent
+                ? `${(form.courses ?? []).length || 'No'} course${(form.courses ?? []).length === 1 ? '' : 's'} selected — tick every course this student is enrolled in.`
+                : `${(form.courses ?? []).length || 'No'} course${(form.courses ?? []).length === 1 ? '' : 's'} selected.`}
+            </p>
           </div>
         )}
         <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
@@ -352,9 +441,9 @@ function UserFormModal({
           <button
             type="submit"
             className="btn-primary"
-            disabled={saving || emailStatus === 'checking' || emailStatus === 'invalid'}
+            disabled={saving || (!isStudent && (emailStatus === 'checking' || emailStatus === 'invalid'))}
           >
-            {isEdit ? 'Save changes' : saving ? 'Verifying & sending…' : 'Send invite'}
+            {isEdit ? 'Save changes' : isStudent ? (saving ? 'Adding student…' : 'Add student') : saving ? 'Verifying & sending…' : 'Send invite'}
           </button>
         </div>
       </form>
@@ -362,31 +451,49 @@ function UserFormModal({
   )
 }
 
-export default function AdminPanel() {
+export default function AdminPanel({ roleRestriction = [ROLES.FACULTY], initialRoleFilter = ROLES.FACULTY } = {}) {
+  const roleOptions =
+    Array.isArray(roleRestriction) && roleRestriction.length ? roleRestriction : DEFAULT_ROLE_OPTIONS
+  const restrictedMode = Array.isArray(roleRestriction) && roleRestriction.length > 0
+
+  // UI simplification: roles that are merged in the system shouldn't be shown as separate options.
+  const uiRoleOptions = roleOptions.filter(
+    (r) => r !== ROLES.DEPARTMENT_HEAD && r !== ROLES.STAFF,
+  )
+  const effectiveRoleOptions = uiRoleOptions.length ? uiRoleOptions : roleOptions
+
   const [users, setUsers] = useState([])
   const [departments, setDepartments] = useState([])
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
-  const [roleFilter, setRoleFilter] = useState('All')
+  const [roleFilter, setRoleFilter] = useState(
+    effectiveRoleOptions.includes(initialRoleFilter) ? initialRoleFilter : effectiveRoleOptions[0],
+  )
   const [statusFilter, setStatusFilter] = useState('All')
   const [modalMode, setModalMode] = useState(null)
   const [editingId, setEditingId] = useState(null)
-  const [form, setForm] = useState(emptyUserForm())
+  const [form, setForm] = useState(emptyUserForm([], effectiveRoleOptions[0] ?? ROLES.FACULTY))
   const [removeTarget, setRemoveTarget] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [inviteResult, setInviteResult] = useState(null)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [emailStatus, setEmailStatus] = useState('') // '' | checking | valid | invalid
+  const canAddStudents = effectiveRoleOptions.includes(ROLES.STUDENT)
+  const viewingStudents = roleFilter === ROLES.STUDENT
+  const statusFilters = viewingStudents ? STATUS_FILTERS.filter((status) => status !== 'Invited') : STATUS_FILTERS
 
   async function loadUsers() {
     setLoading(true)
     setError(null)
     try {
+      const studentStatus = statusFilter === 'Invited' ? 'All' : statusFilter
       const [userList, deptList, courseList] = await Promise.all([
-        api.getAdminUsers({ search, role: roleFilter, status: statusFilter }),
+        viewingStudents
+          ? api.getAdminStudents({ search, status: studentStatus })
+          : api.getAdminUsers({ search, role: roleFilter, status: statusFilter }),
         departments.length ? Promise.resolve(departments) : api.getDepartments(),
         courses.length ? Promise.resolve(courses) : api.getCourses(),
       ])
@@ -428,7 +535,7 @@ export default function AdminPanel() {
         courseList = await api.getCourses()
         setCourses(courseList)
       }
-      setForm(emptyUserForm(depts))
+      setForm(emptyUserForm(depts, viewingStudents ? ROLES.STUDENT : effectiveRoleOptions[0] ?? ROLES.FACULTY))
       setFormError('')
       setEmailStatus('')
       setEditingId(null)
@@ -457,10 +564,11 @@ export default function AdminPanel() {
     setEditingId(null)
     setFormError('')
     setEmailStatus('')
-    setForm(emptyUserForm(departments))
+    setForm(emptyUserForm(departments, effectiveRoleOptions[0] ?? ROLES.FACULTY))
   }
 
   async function handleEmailBlur(email) {
+    if (form.role === ROLES.STUDENT) return
     const value = email?.trim()
     if (!value) {
       setEmailStatus('')
@@ -469,11 +577,17 @@ export default function AdminPanel() {
     setEmailStatus('checking')
     setFormError('')
     try {
-      await api.validateWorkEmail(value)
+      const result = await api.validateWorkEmail(value)
+      if (!result?.mailboxConfirmed) {
+        setEmailStatus('invalid')
+        setFormError('This email does not exist. Enter a valid email address.')
+        return
+      }
       setEmailStatus('valid')
+      setFormError('')
     } catch (err) {
       setEmailStatus('invalid')
-      setFormError(err.message ?? 'Enter a valid email that exists.')
+      setFormError(err.message || 'This email does not exist. Enter a valid email address.')
     }
   }
 
@@ -482,12 +596,14 @@ export default function AdminPanel() {
     setError(null)
     setFormError('')
     try {
+      const isStudent = form.role === ROLES.STUDENT
       if (modalMode === 'edit' && editingId) {
-        await api.updateAdminUser(editingId, form)
+        if (isStudent) await api.updateStudent(editingId, form)
+        else await api.updateAdminUser(editingId, form)
         closeModal()
         await loadUsers()
       } else {
-        const result = await api.createAdminUser(form)
+        const result = isStudent ? await api.createStudent(form) : await api.createAdminUser(form)
         closeModal()
         setInviteResult(result)
         await loadUsers()
@@ -524,9 +640,10 @@ export default function AdminPanel() {
     }
   }
 
-  async function handleToggleStatus(id) {
+  async function handleToggleStatus(account) {
     try {
-      await api.toggleAdminUserStatus(id)
+      if (account.role === ROLES.STUDENT) await api.toggleStudentStatus(account.id)
+      else await api.toggleAdminUserStatus(account.id)
       await loadUsers()
     } catch (err) {
       setError(err)
@@ -536,7 +653,8 @@ export default function AdminPanel() {
   async function handleConfirmRemove() {
     if (!removeTarget) return
     try {
-      await api.deleteAdminUser(removeTarget.id)
+      if (removeTarget.role === ROLES.STUDENT) await api.deleteStudent(removeTarget.id)
+      else await api.deleteAdminUser(removeTarget.id)
       setRemoveTarget(null)
       await loadUsers()
     } catch (err) {
@@ -546,7 +664,7 @@ export default function AdminPanel() {
 
   function handleClearFilters() {
     setSearch('')
-    setRoleFilter('All')
+    setRoleFilter(restrictedMode ? effectiveRoleOptions[0] : 'All')
     setStatusFilter('All')
   }
 
@@ -561,9 +679,9 @@ export default function AdminPanel() {
   return (
     <PageLayout size="wide">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <SectionHeader as="h2" title="Admin Panel — User Management" description="Invite faculty with a professional system email, assign courses, and manage staff accounts across the institution." />
+        <SectionHeader as="h2" title="Admin Panel — User Management" description={canAddStudents ? 'Invite faculty by email, or add students directly to the roster. Faculty receive an activation link; students are enrolled in one or more courses immediately.' : 'Invite users with a professional system email and manage accounts in your scope.'} />
         <button type="button" onClick={openInviteModal} className="btn-primary shrink-0">
-          <Plus size={16} aria-hidden="true" /> Invite new user
+          <Plus size={16} aria-hidden="true" /> {canAddStudents ? 'Add faculty or student' : 'Invite new user'}
         </button>
       </div>
 
@@ -579,21 +697,21 @@ export default function AdminPanel() {
           value={stats.total}
           subLabel="Managed users"
           icon={Users}
-          iconTone="blue"
+          kpiTheme="accounts"
         />
         <StatCard
           label="Active"
           value={stats.active}
           subLabel="Currently enabled"
           icon={UserCheck}
-          iconTone="green"
+          kpiTheme="active"
         />
         <StatCard
           label="Pending Invites"
           value={stats.invited}
           subLabel="Awaiting acceptance"
           icon={UserPlus}
-          iconTone="amber"
+          kpiTheme="pending"
         />
       </div>
 
@@ -601,24 +719,62 @@ export default function AdminPanel() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative max-w-md min-w-0 flex-1">
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-            <input id="admin-user-search" type="search" placeholder="Search by name or email…" value={search} onChange={(e) => setSearch(e.target.value)} className="input-field py-2 pl-9" />
+            <input id="admin-user-search" type="search" placeholder={viewingStudents ? 'Search by student name or ID…' : 'Search by name or email…'} value={search} onChange={(e) => setSearch(e.target.value)} className="input-field py-2 pl-9" />
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:gap-4">
             <div>
               <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.03em] text-text-muted">Role</p>
-              <div className="flex flex-wrap gap-2">
-                {ROLE_FILTERS.map((role) => (
-                  <button key={role} type="button" onClick={() => setRoleFilter(role)} aria-pressed={roleFilter === role} className={['filter-pill', roleFilter === role ? 'filter-pill-active' : 'filter-pill-inactive'].join(' ')}>
-                    {role}
-                  </button>
-                ))}
-              </div>
+              {!restrictedMode ? (
+                <div className="flex flex-wrap gap-2">
+                  {['All', ...effectiveRoleOptions].map((role) => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => setRoleFilter(role)}
+                      aria-pressed={roleFilter === role}
+                      className={[
+                        'filter-pill',
+                        roleFilter === role ? 'filter-pill-active' : 'filter-pill-inactive',
+                      ].join(' ')}
+                    >
+                      {role}
+                    </button>
+                  ))}
+                </div>
+              ) : canAddStudents && effectiveRoleOptions.includes(ROLES.FACULTY) ? (
+                <RoleOnOffSwitch
+                  offValue={ROLES.FACULTY}
+                  onValue={ROLES.STUDENT}
+                  value={roleFilter}
+                  onChange={(role) => {
+                    setRoleFilter(role)
+                    if (role === ROLES.STUDENT && statusFilter === 'Invited') setStatusFilter('All')
+                  }}
+                />
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {effectiveRoleOptions.map((role) => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => {
+                        setRoleFilter(role)
+                        if (role === ROLES.STUDENT && statusFilter === 'Invited') setStatusFilter('All')
+                      }}
+                      aria-pressed={roleFilter === role}
+                      className={['filter-pill', roleFilter === role ? 'filter-pill-active' : 'filter-pill-inactive'].join(' ')}
+                    >
+                      {role}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="hidden self-stretch border-l border-border sm:block" aria-hidden="true" />
             <div>
               <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.03em] text-text-muted">Status</p>
               <div className="flex flex-wrap gap-2">
-                {STATUS_FILTERS.map((status) => (
+                {statusFilters.map((status) => (
                   <button key={status} type="button" onClick={() => setStatusFilter(status)} aria-pressed={statusFilter === status} className={['filter-pill', statusFilter === status ? 'filter-pill-active' : 'filter-pill-inactive'].join(' ')}>
                     {status}
                   </button>
@@ -629,53 +785,73 @@ export default function AdminPanel() {
         </div>
 
         {loading ? (
-          <div className="mt-6 space-y-3">
+          <div className={`${LIST_PANEL} space-y-3 p-4`}>
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="animate-skeleton h-12 w-full rounded-md bg-border/80" />
+              <div key={i} className="animate-skeleton h-12 w-full rounded-md bg-[#D5DEEB]" />
             ))}
           </div>
         ) : users.length === 0 ? (
-          <div className="mt-8 flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-background px-6 py-16 text-center">
-            <SearchX size={22} className="text-primary-600" aria-hidden="true" />
-            <h3 className="mt-4 text-sm font-semibold text-text-primary">No users match your search</h3>
+          <div className={`${LIST_PANEL} flex flex-col items-center justify-center px-6 py-16 text-center`}>
+            <SearchX size={22} className="text-[#2C3546]" aria-hidden="true" />
+            <h3 className="mt-4 text-sm font-semibold text-text-primary">{viewingStudents ? 'No students match your search' : 'No users match your search'}</h3>
             {hasActiveFilters && (
               <button type="button" onClick={handleClearFilters} className="btn-primary mt-4">Clear filters</button>
             )}
           </div>
         ) : (
-          <div className="mt-6 -mx-5 min-w-0 overflow-x-auto px-5 sm:mx-0 sm:px-0">
+          <div className={`${LIST_PANEL} -mx-5 min-w-0 sm:mx-0`}>
+            <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-border bg-[#F9FAFB]">
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Name</th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Work email</th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Role</th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Department</th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Courses</th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Status</th>
+                <tr className="border-b border-[#CDD6E4] bg-[#D9E2EF]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-[#3D4A5C]">Name</th>
+                  {!viewingStudents && (
+                    <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-[#3D4A5C]">Work email</th>
+                  )}
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-[#3D4A5C]">Role</th>
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-[#3D4A5C]">Department</th>
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-[#3D4A5C]">{viewingStudents ? 'Enrolled courses' : 'Courses'}</th>
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-[#3D4A5C]">Status</th>
                   <th className="px-3 py-3"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((account) => (
-                  <tr key={account.id} className="border-b border-border transition-colors hover:bg-[#F9FAFB] last:border-b-0">
+                  <tr key={account.id} className="border-b border-[#D5DEEB] bg-transparent transition-colors hover:bg-[#DEE6F2] last:border-b-0">
                     <td className="px-3 py-3">
                       <p className="font-medium text-text-primary">{account.name}</p>
                       <p className="text-xs text-text-muted">{account.id}</p>
                     </td>
+                    {!viewingStudents && (
                     <td className="px-3 py-3 text-text-secondary">
-                      <span className="inline-flex items-center gap-1.5">
-                        <Mail size={14} className="shrink-0 text-text-muted" aria-hidden="true" />
-                        {account.email}
-                      </span>
+                      {account.role === ROLES.STUDENT ? (
+                        <span className="text-text-muted">—</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Mail size={14} className="shrink-0 text-text-muted" aria-hidden="true" />
+                          {account.email}
+                        </span>
+                      )}
                     </td>
+                    )}
                     <td className="px-3 py-3"><RoleBadge role={account.role} /></td>
                     <td className="px-3 py-3 text-text-secondary">{account.department}</td>
                     <td className="px-3 py-3 text-text-secondary">
-                      {account.role === ROLES.FACULTY
+                      {account.role === ROLES.FACULTY || account.role === ROLES.STUDENT
                         ? (account.courses?.length
-                          ? account.courses.join(', ')
-                          : <span className="text-risk-high">No courses assigned</span>)
+                          ? (
+                            <div className="flex max-w-[22rem] flex-wrap gap-1.5">
+                              {account.courses.map((course) => (
+                                <span
+                                  key={course}
+                                  className="inline-flex items-center rounded-full border border-primary-100 bg-primary-50 px-2 py-0.5 text-[11px] font-medium text-primary-800"
+                                >
+                                  {course}
+                                </span>
+                              ))}
+                            </div>
+                          )
+                          : <span className="text-risk-high">{account.role === ROLES.STUDENT ? 'No courses enrolled' : 'No courses assigned'}</span>)
                         : '—'}
                     </td>
                     <td className="px-3 py-3"><StatusBadge status={account.status} /></td>
@@ -695,6 +871,7 @@ export default function AdminPanel() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </Card>
@@ -705,6 +882,7 @@ export default function AdminPanel() {
         form={form}
         departments={departments}
         courseOptions={courses}
+        roleOptions={effectiveRoleOptions}
         onChange={(updater) => {
           setForm(updater)
           setEmailStatus('')
@@ -723,8 +901,8 @@ export default function AdminPanel() {
       <Modal
         isOpen={Boolean(removeTarget)}
         onClose={() => setRemoveTarget(null)}
-        title="Remove user account?"
-        description={removeTarget ? `This will permanently remove ${removeTarget.name} from the managed user list.` : undefined}
+        title={removeTarget?.role === ROLES.STUDENT ? 'Remove student?' : 'Remove user account?'}
+        description={removeTarget ? `This will permanently remove ${removeTarget.name} from the ${removeTarget.role === ROLES.STUDENT ? 'student roster' : 'managed user list'}.` : undefined}
         size="small"
       >
         <div className="flex flex-wrap justify-end gap-2">

@@ -11,7 +11,7 @@ seedDatabase()
 
 const app = createApp()
 
-const server = app.listen(env.port, () => {
+const server = app.listen(env.port, '0.0.0.0', () => {
   console.log(`Student Success API running on http://localhost:${env.port}`)
   console.log(`Database: ${env.databasePath}`)
 })

@@ -17,19 +17,22 @@ import {
   ReportsSkeleton,
   RiskAlertsSkeleton,
 } from './components/skeletons/LoadingSkeletons'
-import { Toast } from './components/ui'
+import { Toast, UserAvatar } from './components/ui'
 import AdminPanel from './screens/AdminPanel'
 import AcademicAdminDashboard from './screens/AcademicAdminDashboard'
 import DepartmentDashboard from './screens/DepartmentDashboard'
 import DirectorDashboard from './screens/DirectorDashboard'
+import DirectorAdminPanel from './screens/DirectorAdminPanel'
 import FacultyDashboard from './screens/FacultyDashboard'
 import FacultyOverview from './screens/FacultyOverview'
 import FacultyStudents from './screens/FacultyStudents'
 import InstitutionalReports from './screens/InstitutionalReports'
 import Login from './screens/Login'
 import AcceptInvite from './screens/AcceptInvite'
+import ResetPassword from './screens/ResetPassword'
 import RecommendationEngine from './screens/RecommendationEngine'
 import RiskAlertPanel from './screens/RiskAlertPanel'
+import DirectorRiskDrilldown from './screens/DirectorRiskDrilldown'
 import Settings from './screens/Settings'
 import StudentDetail from './screens/StudentDetail'
 import StudentSearch from './screens/StudentSearch'
@@ -50,6 +53,7 @@ const NAV_ICONS = {
   recommendations: Lightbulb,
   reports: BarChart3,
   admin: UserCog,
+  'director-admin': UserCog,
   settings: SettingsIcon,
 }
 
@@ -64,37 +68,31 @@ const SKELETONS = {
   reports: ReportsSkeleton,
 }
 
+function readAuthLink() {
+  const params = new URLSearchParams(window.location.search)
+  const path = window.location.pathname
+  const hash = window.location.hash.replace(/^#/, '')
+  const hashQuery = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : ''
+  const hashParams = new URLSearchParams(hashQuery)
+  const token = params.get('token') || params.get('resetToken') || hashParams.get('token')
+
+  if (!token) return { kind: null, token: null }
+
+  const isReset =
+    path.includes('reset-password') || hash.includes('reset-password') || params.has('resetToken')
+  const isInvite = path.includes('accept-invite') || hash.includes('accept-invite')
+
+  if (isReset && !isInvite) return { kind: 'reset', token }
+  if (isInvite && !isReset) return { kind: 'invite', token }
+  return { kind: 'unknown', token }
+}
+
 function deriveNameFromEmail(email) {
   if (!email) return 'User'
   const local = email.split('@')[0] ?? ''
   return local
     .replace(/[._-]/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
-function deriveInitials(name) {
-  if (!name) return 'U'
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase()
-}
-
-function UserAvatar({ name, className = '' }) {
-  return (
-    <div
-      className={[
-        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-        className,
-      ].join(' ')}
-      aria-hidden="true"
-      style={{
-        backgroundColor: '#0B6E4F',
-        color: '#ffffff',
-      }}
-    >
-      {deriveInitials(name)}
-    </div>
-  )
 }
 
 function LogoutButton({ onClick, fullWidth = false, compact = false }) {
@@ -180,6 +178,8 @@ function AppShell({
   onOpenSearch,
   onSelectStudent,
   onBackFromDetail,
+  onBackFromSearch,
+  onSelectStaff,
   onLogout,
   onNotify,
   onUserUpdate,
@@ -188,15 +188,15 @@ function AppShell({
   selectedDepartment,
   onSelectFaculty,
   onClearFacultyFilter,
-  onSelectDepartment,
   onClearDepartmentFilter,
 }) {
   const displayName = user.name ?? deriveNameFromEmail(user.email)
   const navItems = useMemo(() => {
     const items = getNavItemsForRole(user.role).filter((item) => {
       if (item.id === 'faculty-overview') return user.role === ROLES.DEPARTMENT_HEAD
-      if (item.id === 'admin') return user.role === ROLES.ADMIN
-      if (item.id === 'my-students' || item.id === 'recommendations') return user.role === ROLES.FACULTY
+      if (item.id === 'admin') return user.role === ROLES.ADMIN || user.role === ROLES.STAFF
+      if (item.id === 'my-students' || item.id === 'recommendations')
+        return user.role === ROLES.FACULTY || user.role === ROLES.DEPARTMENT_HEAD
       return true
     })
 
@@ -218,18 +218,11 @@ function AppShell({
       case 'dashboard':
         if (user.role === ROLES.DIRECTOR) {
           return (
-            <DirectorDashboard
-              user={user}
-              onSelectStudent={onSelectStudent}
-              onSelectDepartment={onSelectDepartment}
-            />
+            <DirectorDashboard />
           )
         }
-        if (user.role === ROLES.ADMIN) {
-          return <AcademicAdminDashboard onSelectStudent={onSelectStudent} />
-        }
-        if (user.role === ROLES.DEPARTMENT_HEAD) {
-          return <DepartmentDashboard user={user} />
+        if (user.role === ROLES.ADMIN || user.role === ROLES.STAFF) {
+          return <AcademicAdminDashboard />
         }
         return <FacultyDashboard user={user} onSelectStudent={onSelectStudent} onNavigate={onNavigate} />
       case 'my-students':
@@ -239,6 +232,9 @@ function AppShell({
           <FacultyOverview user={user} onSelectFaculty={onSelectFaculty} />
         )
       case 'risk-alerts':
+        if (user.role === ROLES.DIRECTOR || user.role === ROLES.ADMIN || user.role === ROLES.STAFF) {
+          return <DirectorRiskDrilldown onSelectStudent={onSelectStudent} />
+        }
         return (
           <RiskAlertPanel
             user={user}
@@ -254,11 +250,20 @@ function AppShell({
       case 'reports':
         return <InstitutionalReports user={user} />
       case 'admin':
-        return <AdminPanel />
+        return <AdminPanel roleRestriction={[ROLES.FACULTY, ROLES.STUDENT]} initialRoleFilter={ROLES.FACULTY} />
+      case 'director-admin':
+        return <DirectorAdminPanel user={user} />
       case 'settings':
-        return <Settings user={user} onUserUpdate={onUserUpdate} />
+        return <Settings user={user} onUserUpdate={onUserUpdate} onNotify={onNotify} />
       case 'student-search':
-        return <StudentSearch user={user} onSelectStudent={onSelectStudent} />
+        return (
+          <StudentSearch
+            user={user}
+            onSelectStudent={onSelectStudent}
+            onSelectStaff={onSelectStaff}
+            onBack={onBackFromSearch}
+          />
+        )
       case 'student-detail':
         return (
           <StudentDetail
@@ -269,27 +274,18 @@ function AppShell({
       default:
         if (user.role === ROLES.DIRECTOR) {
           return (
-            <DirectorDashboard
-              user={user}
-              onSelectStudent={onSelectStudent}
-              onSelectDepartment={onSelectDepartment}
-            />
+            <DirectorDashboard />
           )
         }
-        if (user.role === ROLES.ADMIN) {
-          return <AcademicAdminDashboard onSelectStudent={onSelectStudent} />
+        if (user.role === ROLES.ADMIN || user.role === ROLES.STAFF) {
+          return <AcademicAdminDashboard />
         }
-        return user.role === ROLES.DEPARTMENT_HEAD ? (
-          <DepartmentDashboard user={user} />
-        ) : (
-          <FacultyDashboard user={user} onSelectStudent={onSelectStudent} onNavigate={onNavigate} />
-        )
+        return <FacultyDashboard user={user} onSelectStudent={onSelectStudent} onNavigate={onNavigate} />
     }
   }
 
   return (
     <div className="flex min-h-svh bg-background">
-      {/* Desktop sidebar — fixed height, logout always pinned at bottom */}
       <aside className="sticky top-0 hidden h-svh w-64 shrink-0 flex-col border-r border-border bg-surface md:flex">
         <div className="flex shrink-0 items-center gap-2.5 border-b border-border px-5 py-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600 text-white shadow-card">
@@ -320,7 +316,7 @@ function AppShell({
         <div className="mt-auto shrink-0 border-t border-border bg-surface p-3">
           <div className="rounded-xl border border-border bg-[#F9FAFB] p-3">
             <div className="flex items-center gap-3">
-              <UserAvatar name={displayName} />
+              <UserAvatar name={displayName} photoUrl={user.avatarUrl} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-text-primary">{displayName}</p>
                 <p className="mt-0.5 truncate text-[11px] text-text-muted">{user.role}</p>
@@ -349,7 +345,11 @@ function AppShell({
             <button
               type="button"
               onClick={onOpenSearch}
-              aria-label="Open student search"
+              aria-label={
+                user.role === ROLES.DIRECTOR || user.role === ROLES.ADMIN || user.role === ROLES.STAFF
+                  ? 'Search people'
+                  : 'Open student search'
+              }
               className={[
                 'btn-secondary px-3 py-2',
                 view === 'student-search' ? 'border-primary-600 bg-primary-50 text-primary-700' : '',
@@ -360,7 +360,7 @@ function AppShell({
             </button>
 
             <div className="hidden items-center gap-2 rounded-lg border border-border bg-[#F9FAFB] py-1 pl-1 pr-2 md:flex">
-              <UserAvatar name={displayName} />
+              <UserAvatar name={displayName} photoUrl={user.avatarUrl} />
               <div className="min-w-0">
                 <p className="max-w-[9rem] truncate text-xs font-semibold text-text-primary lg:max-w-[12rem]">
                   {displayName}
@@ -404,6 +404,7 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true)
   const [view, setView] = useState('dashboard')
   const [previousView, setPreviousView] = useState('dashboard')
+  const [searchReturnView, setSearchReturnView] = useState('dashboard')
   const [selectedStudentId, setSelectedStudentId] = useState(null)
   const [selectedFacultyId, setSelectedFacultyId] = useState(null)
   const [selectedDepartment, setSelectedDepartment] = useState(null)
@@ -411,18 +412,33 @@ function App() {
   const [toast, setToast] = useState(null)
   const loadingTimerRef = useRef(null)
   const [inviteToken, setInviteToken] = useState(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (window.location.pathname.includes('accept-invite') || params.has('token')) {
-      return params.get('token')
-    }
-    // Support hash-style links: #/accept-invite?token=...
-    const hash = window.location.hash.replace(/^#/, '')
-    if (hash.includes('accept-invite')) {
-      const q = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : ''
-      return new URLSearchParams(q).get('token')
-    }
-    return null
+    const link = readAuthLink()
+    return link.kind === 'invite' ? link.token : null
   })
+  const [resetToken, setResetToken] = useState(() => {
+    const link = readAuthLink()
+    return link.kind === 'reset' ? link.token : null
+  })
+  const [loginNotice, setLoginNotice] = useState('')
+
+  useEffect(() => {
+    const link = readAuthLink()
+    if (link.kind !== 'unknown' || !link.token) return undefined
+
+    let cancelled = false
+    api
+      .getPasswordReset(link.token)
+      .then(() => {
+        if (!cancelled) setResetToken(link.token)
+      })
+      .catch(() => {
+        if (!cancelled) setInviteToken(link.token)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const dismissToast = useCallback(() => setToast(null), [])
 
@@ -451,8 +467,8 @@ function App() {
     let cancelled = false
 
     async function restoreSession() {
-      // Prefer invitation activation over an existing session when an invite link is opened
-      if (inviteToken) {
+      // Prefer invitation / password-reset links over an existing session
+      if (inviteToken || resetToken) {
         setToken(null)
         setAuthLoading(false)
         return
@@ -556,8 +572,22 @@ function App() {
   }
 
   function handleOpenSearch() {
-    setPreviousView(view === 'student-detail' ? previousView : view)
+    if (view !== 'student-search') {
+      setSearchReturnView(view)
+    }
     navigateWithLoading('student-search', false)
+  }
+
+  function handleBackFromSearch() {
+    const target =
+      searchReturnView && searchReturnView !== 'student-search' ? searchReturnView : 'dashboard'
+    setIsLoading(false)
+    setView(target)
+  }
+
+  function handleSelectStaff() {
+    setIsLoading(false)
+    setView(user?.role === ROLES.DIRECTOR ? 'director-admin' : 'admin')
   }
 
   function handleSelectStudent(studentId) {
@@ -591,11 +621,15 @@ function App() {
     setToast(null)
   }
 
-  function handleNotify({ studentName, decision }) {
-    if (decision === 'accepted') {
-      showToast(`Intervention plan accepted for ${studentName}`, 'success')
+  function handleNotify(payload = {}) {
+    if (payload.message) {
+      showToast(payload.message, payload.variant ?? 'info')
+      return
+    }
+    if (payload.decision === 'accepted') {
+      showToast(`Intervention plan accepted for ${payload.studentName}`, 'success')
     } else {
-      showToast(`Recommendation dismissed for ${studentName}`, 'dismiss')
+      showToast(`Recommendation dismissed for ${payload.studentName}`, 'dismiss')
     }
   }
 
@@ -612,11 +646,37 @@ function App() {
     )
   }
 
+  if (!user && resetToken) {
+    return (
+      <div className="animate-page-enter">
+        <ResetPassword
+          token={resetToken}
+          onComplete={() => {
+            const url = new URL(window.location.href)
+            url.pathname = '/'
+            url.search = ''
+            url.hash = ''
+            window.history.replaceState({}, '', url.toString())
+            setResetToken(null)
+            setLoginNotice('Your password was updated. Sign in with your new password.')
+          }}
+        />
+      </div>
+    )
+  }
+
   if (!user && inviteToken) {
     return (
       <div className="animate-page-enter">
         <AcceptInvite
           token={inviteToken}
+          onUseAsReset={() => {
+            const url = new URL(window.location.href)
+            url.pathname = '/reset-password'
+            window.history.replaceState({}, '', url.toString())
+            setInviteToken(null)
+            setResetToken(inviteToken)
+          }}
           onAccepted={({ user: invitedUser, token }) => handleInviteAccepted(invitedUser, token)}
         />
       </div>
@@ -626,7 +686,7 @@ function App() {
   if (!user) {
     return (
       <div className="animate-page-enter">
-        <Login onLogin={handleLogin} />
+        <Login onLogin={handleLogin} initialNotice={loginNotice} />
       </div>
     )
   }
@@ -641,6 +701,8 @@ function App() {
         onOpenSearch={handleOpenSearch}
         onSelectStudent={handleSelectStudent}
         onBackFromDetail={handleBackFromDetail}
+        onBackFromSearch={handleBackFromSearch}
+        onSelectStaff={handleSelectStaff}
         onLogout={handleLogout}
         onNotify={handleNotify}
         onUserUpdate={handleUserUpdate}
@@ -649,7 +711,6 @@ function App() {
         selectedDepartment={selectedDepartment}
         onSelectFaculty={handleSelectFaculty}
         onClearFacultyFilter={handleClearFacultyFilter}
-        onSelectDepartment={handleSelectDepartment}
         onClearDepartmentFilter={handleClearDepartmentFilter}
       />
       <Toast toast={toast} onDismiss={dismissToast} />

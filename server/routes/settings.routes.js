@@ -1,7 +1,12 @@
 import { Router } from 'express'
 import { authenticate } from '../middleware/auth.js'
-import { getSettings, updateNotifications, updateProfile } from '../services/settings.service.js'
-import { loadUserById } from '../services/auth.service.js'
+import {
+  getSettings,
+  removeAvatar,
+  updateAvatar,
+  updateNotifications,
+  updateProfile,
+} from '../services/settings.service.js'
 import { asyncHandler, sendSuccess } from '../utils/response.js'
 
 const router = Router()
@@ -18,16 +23,28 @@ router.get(
 router.put(
   '/profile',
   asyncHandler(async (req, res) => {
-    const settings = updateProfile(req.user.id, req.body ?? {})
-    sendSuccess(res, { ...settings, user: loadUserById(req.user.id) })
+    sendSuccess(res, updateProfile(req.user.id, req.body ?? {}))
+  }),
+)
+
+router.put(
+  '/avatar',
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, updateAvatar(req.user.id, req.body?.image))
+  }),
+)
+
+router.delete(
+  '/avatar',
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, removeAvatar(req.user.id))
   }),
 )
 
 router.put(
   '/notifications',
   asyncHandler(async (req, res) => {
-    const settings = updateNotifications(req.user.id, req.body ?? {})
-    sendSuccess(res, settings)
+    sendSuccess(res, updateNotifications(req.user.id, req.body ?? {}))
   }),
 )
 

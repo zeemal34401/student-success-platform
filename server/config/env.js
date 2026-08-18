@@ -21,6 +21,7 @@ export const env = {
   appBaseUrl: process.env.APP_BASE_URL ?? process.env.CORS_ORIGIN ?? 'http://localhost:5173',
   isProduction: process.env.NODE_ENV === 'production',
   inviteExpiryHours: Number(process.env.INVITE_EXPIRY_HOURS ?? 72),
+  passwordResetExpiryMinutes: Number(process.env.PASSWORD_RESET_EXPIRY_MINUTES ?? 30),
   email: {
     from: process.env.EMAIL_FROM ?? 'PrognosEd <noreply@studentsuccess.local>',
     smtpHost: process.env.SMTP_HOST ?? '',
@@ -32,9 +33,9 @@ export const env = {
     smtpPass: String(process.env.SMTP_PASS ?? '').replace(/\s+/g, ''),
     // Optional nodemailer service shortcut, e.g. "gmail"
     smtpService: process.env.SMTP_SERVICE ?? '',
-    // mx = domain MX required (recommended); smtp = also probe mailbox via port 25
-    verifyMode: process.env.EMAIL_VERIFY_MODE ?? 'mx',
-    verifyStrict: process.env.EMAIL_VERIFY_STRICT === 'true',
+    // smtp = confirm the mailbox exists (default); mx = domain MX records only
+    verifyMode: process.env.EMAIL_VERIFY_MODE ?? 'smtp',
+    verifyStrict: process.env.EMAIL_VERIFY_STRICT !== 'false',
     verifyTimeoutMs: Number(process.env.EMAIL_VERIFY_TIMEOUT_MS ?? 8000),
   },
   ml: {

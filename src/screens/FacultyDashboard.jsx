@@ -115,7 +115,6 @@ export default function FacultyDashboard({ user, onSelectStudent, onNavigate }) 
           icon={AlertTriangle}
           iconTone="critical"
           topBorderColor="#D92D20"
-          tintBackgroundColor="#FEF6F6"
         />
         <StatCard
           label="Avg GPA"
@@ -128,7 +127,7 @@ export default function FacultyDashboard({ user, onSelectStudent, onNavigate }) 
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5">
-        <Card className="lg:col-span-3 bg-[#F8FAFC]">
+        <Card className="lg:col-span-3">
           <h2 className="card-title">Weekly Engagement Trend</h2>
           <p className="mt-0.5 text-sm text-text-secondary">
             Attendance and LMS activity over the past 8 weeks

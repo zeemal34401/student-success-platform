@@ -6,6 +6,7 @@ export function getNavItemsForRole(role) {
     { id: 'my-students', label: 'My Students', shortLabel: 'Students' },
     { id: 'risk-alerts', label: 'Risk Alerts', shortLabel: 'Alerts' },
     { id: 'recommendations', label: 'Recommendations', shortLabel: 'Plans' },
+    { id: 'reports', label: 'Class Reports', shortLabel: 'Reports' },
     { id: 'settings', label: 'Settings', shortLabel: 'Settings' },
   ]
 
@@ -20,15 +21,16 @@ export function getNavItemsForRole(role) {
   const admin = [
     { id: 'dashboard', label: 'Academic Overview', shortLabel: 'Overview' },
     { id: 'reports', label: 'Institutional Reports', shortLabel: 'Reports' },
-    { id: 'risk-alerts', label: 'Risk Alerts', shortLabel: 'Alerts' },
+    { id: 'risk-alerts', label: 'Academic Insights', shortLabel: 'Insights' },
     { id: 'admin', label: 'Admin Panel', shortLabel: 'Admin' },
     { id: 'settings', label: 'Settings', shortLabel: 'Settings' },
   ]
 
   const director = [
     { id: 'dashboard', label: 'Executive Dashboard', shortLabel: 'Dashboard' },
+    { id: 'director-admin', label: 'Admin Management', shortLabel: 'Admins' },
     { id: 'reports', label: 'University Reports', shortLabel: 'Reports' },
-    { id: 'risk-alerts', label: 'High-Risk Students', shortLabel: 'Alerts' },
+    { id: 'risk-alerts', label: 'Academic Insights', shortLabel: 'Insights' },
     { id: 'settings', label: 'Settings', shortLabel: 'Settings' },
   ]
 
@@ -38,16 +40,18 @@ export function getNavItemsForRole(role) {
     { id: 'settings', label: 'Settings', shortLabel: 'Settings' },
   ]
 
+  // Merged-role behavior:
+  // - Department Head behaves like Faculty
+  // - Administrative Staff behaves like Academic Admin
   if (role === ROLES.DIRECTOR) return director
   if (role === ROLES.ADMIN) return admin
-  if (role === ROLES.DEPARTMENT_HEAD) return deptHead
-  if (role === ROLES.STAFF) return staff
+  if (role === ROLES.DEPARTMENT_HEAD) return faculty
+  if (role === ROLES.STAFF) return admin
   return faculty
 }
 
 export function getDefaultViewForRole(role) {
-  if (role === ROLES.DIRECTOR || role === ROLES.ADMIN) return 'dashboard'
-  if (role === ROLES.STAFF) return 'reports'
+  if (role === ROLES.DIRECTOR || role === ROLES.ADMIN || role === ROLES.STAFF) return 'dashboard'
   return 'dashboard'
 }
 
@@ -56,25 +60,31 @@ export function getViewTitle(view, role) {
     dashboard:
       role === ROLES.DIRECTOR
         ? 'Executive Dashboard'
-        : role === ROLES.ADMIN
+        : role === ROLES.ADMIN || role === ROLES.STAFF
           ? 'Academic Overview'
-          : role === ROLES.DEPARTMENT_HEAD
-            ? 'Department Dashboard'
-            : 'Faculty Dashboard',
+          : 'Faculty Dashboard',
     'my-students': 'My Students',
     'risk-alerts':
-      role === ROLES.DIRECTOR ? 'High-Risk Students' : 'Risk Alerts',
+      role === ROLES.DIRECTOR || role === ROLES.ADMIN || role === ROLES.STAFF
+        ? 'Academic Insights'
+        : 'Risk Alerts',
     'faculty-overview': 'Faculty Overview',
     recommendations: 'Recommendations',
     reports:
-      role === ROLES.DEPARTMENT_HEAD
-        ? 'Department Reports'
-        : role === ROLES.DIRECTOR
-          ? 'University Reports'
-          : 'Institutional Reports',
+      role === ROLES.DIRECTOR
+        ? 'University Reports'
+        : role === ROLES.ADMIN || role === ROLES.STAFF
+          ? 'Institutional Reports'
+          : role === ROLES.DEPARTMENT_HEAD
+            ? 'Department Reports'
+            : 'Class Reports',
     admin: 'Admin Panel — User Management',
+    'director-admin': 'Admin Management — Invite Administrators',
     settings: 'Settings',
-    'student-search': 'Student Search',
+    'student-search':
+      role === ROLES.DIRECTOR || role === ROLES.ADMIN || role === ROLES.STAFF
+        ? 'Search'
+        : 'Student Search',
     'student-detail': 'Student Detail',
   }
   return titles[view] ?? 'Dashboard'

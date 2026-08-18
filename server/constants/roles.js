@@ -5,6 +5,7 @@ export const ROLES = {
   DEPARTMENT_HEAD: 'Department Head',
   FACULTY: 'Faculty',
   STAFF: 'Administrative Staff',
+  STUDENT: 'Student',
 }
 
 /** Roles with institution-wide student visibility (no department/course filter). */

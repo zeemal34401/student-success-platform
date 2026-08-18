@@ -99,6 +99,25 @@ export const api = {
     })
   },
 
+  requestPasswordReset(email) {
+    return apiRequest('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+      timeoutMs: EMAIL_REQUEST_TIMEOUT_MS,
+    })
+  },
+
+  getPasswordReset(token) {
+    return apiRequest(`/auth/reset/${encodeURIComponent(token)}`)
+  },
+
+  resetPassword(token, password, confirmPassword) {
+    return apiRequest('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password, confirmPassword }),
+    })
+  },
+
   logout() {
     return apiRequest('/auth/logout', { method: 'POST' })
   },
@@ -121,6 +140,25 @@ export const api = {
 
   getDirectorDashboard() {
     return apiRequest('/dashboard/director')
+  },
+
+  getDirectorDepartments() {
+    return apiRequest('/dashboard/director/departments')
+  },
+
+  getDirectorDepartmentFaculty(department) {
+    return apiRequest(`/dashboard/director/departments/${encodeURIComponent(department)}/faculty`)
+  },
+
+  getDirectorFacultyCourses(facultyId) {
+    return apiRequest(`/dashboard/director/faculty/${encodeURIComponent(facultyId)}/courses`)
+  },
+
+  getDirectorCourseStudents(facultyId, course) {
+    const searchParams = new URLSearchParams({ course })
+    return apiRequest(
+      `/dashboard/director/faculty/${encodeURIComponent(facultyId)}/students?${searchParams}`,
+    )
   },
 
   getAcademicAdminDashboard() {
@@ -146,6 +184,10 @@ export const api = {
 
   searchStudents(q) {
     return apiRequest(`/students/search?q=${encodeURIComponent(q)}`)
+  },
+
+  searchPeople(q) {
+    return apiRequest(`/search?q=${encodeURIComponent(q)}`)
   },
 
   getStudent(id) {
@@ -239,6 +281,37 @@ export const api = {
     return apiRequest(`/admin/users/${id}`, { method: 'DELETE' })
   },
 
+  getAdminStudents(params = {}) {
+    const searchParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value != null && value !== '') searchParams.set(key, value)
+    })
+    const query = searchParams.toString()
+    return apiRequest(`/admin/students${query ? `?${query}` : ''}`)
+  },
+
+  createStudent(payload) {
+    return apiRequest('/admin/students', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  updateStudent(id, payload) {
+    return apiRequest(`/admin/students/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  toggleStudentStatus(id) {
+    return apiRequest(`/admin/students/${id}/status`, { method: 'PATCH' })
+  },
+
+  deleteStudent(id) {
+    return apiRequest(`/admin/students/${id}`, { method: 'DELETE' })
+  },
+
   getSettings() {
     return apiRequest('/settings')
   },
@@ -248,6 +321,17 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(payload),
     })
+  },
+
+  updateAvatar(image) {
+    return apiRequest('/settings/avatar', {
+      method: 'PUT',
+      body: JSON.stringify({ image }),
+    })
+  },
+
+  removeAvatar() {
+    return apiRequest('/settings/avatar', { method: 'DELETE' })
   },
 
   updateNotifications(payload) {

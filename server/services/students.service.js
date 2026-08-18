@@ -2,6 +2,7 @@ import { getDb } from '../db/connection.js'
 import { getCurrentTerm } from './auth.service.js'
 import { scoreToRiskLevel } from '../utils/risk.js'
 import { INSTITUTION_WIDE_ROLES, ROLES } from '../constants/roles.js'
+import { AppError } from '../utils/response.js'
 
 export { ROLES }
 
@@ -34,7 +35,13 @@ function baseStudentQuery() {
         WHERE fc.course_id = c.id AND fc.term_id = t.id
         ORDER BY u.name
         LIMIT 1
-      ) AS instructorEmail
+      ) AS instructorEmail,
+      (
+        SELECT GROUP_CONCAT(c2.display_name, '||')
+        FROM student_courses sc
+        JOIN courses c2 ON c2.id = sc.course_id
+        WHERE sc.student_id = s.id AND sc.term_id = t.id
+      ) AS enrolled_courses
     FROM students s
     JOIN courses c ON c.id = s.course_id
     JOIN departments d ON d.id = s.department_id
@@ -77,8 +84,12 @@ export function getScopedStudentFilters(user) {
       return { sql, params }
     }
 
-    sql += ` AND c.id IN (${courseIds.map(() => '?').join(', ')})`
-    params.push(...courseIds)
+    const placeholders = courseIds.map(() => '?').join(', ')
+    sql += ` AND EXISTS (
+      SELECT 1 FROM student_courses sc
+      WHERE sc.student_id = s.id AND sc.term_id = ? AND sc.course_id IN (${placeholders})
+    )`
+    params.push(termId, ...courseIds)
     return { sql, params }
   }
 
@@ -94,7 +105,13 @@ export function listStudents(user, { facultyId, department, riskLevel, search, s
   if (facultyId) {
     const faculty = getFacultyById(facultyId)
     if (faculty?.courses?.length) {
-      sql += ` AND c.display_name IN (${faculty.courses.map(() => '?').join(', ')})`
+      const placeholders = faculty.courses.map(() => '?').join(', ')
+      sql += ` AND EXISTS (
+        SELECT 1 FROM student_courses sc
+        JOIN courses fc_c ON fc_c.id = sc.course_id
+        JOIN terms tsc ON tsc.id = sc.term_id AND tsc.is_current = 1
+        WHERE sc.student_id = s.id AND fc_c.display_name IN (${placeholders})
+      )`
       params.push(...faculty.courses)
     }
   }
@@ -111,8 +128,17 @@ export function listStudents(user, { facultyId, department, riskLevel, search, s
 
   if (search?.trim()) {
     const q = `%${search.trim().toLowerCase()}%`
-    sql += ' AND (LOWER(s.name) LIKE ? OR LOWER(c.display_name) LIKE ? OR LOWER(s.id) LIKE ?)'
-    params.push(q, q, q)
+    sql += ` AND (
+      LOWER(s.name) LIKE ?
+      OR LOWER(s.id) LIKE ?
+      OR LOWER(c.display_name) LIKE ?
+      OR EXISTS (
+        SELECT 1 FROM student_courses sc
+        JOIN courses c2 ON c2.id = sc.course_id
+        WHERE sc.student_id = s.id AND LOWER(c2.display_name) LIKE ?
+      )
+    )`
+    params.push(q, q, q, q)
   }
 
   const sortMap = {
@@ -150,11 +176,33 @@ export function searchStudents(user, query) {
   return listStudents(user, { search: query })
 }
 
+function parseCourseList(value, fallback) {
+  const fromConcat = value ? String(value).split('||').map((name) => name.trim()).filter(Boolean) : []
+  if (fromConcat.length) return [...new Set(fromConcat)]
+  return fallback ? [fallback] : []
+}
+
+export function enrolledCourses(student) {
+  if (Array.isArray(student?.courses) && student.courses.length) return student.courses
+  return student?.course ? [student.course] : []
+}
+
+export function studentInAnyCourse(student, courseNames = []) {
+  const enrolled = enrolledCourses(student)
+  return courseNames.some((name) => enrolled.includes(name))
+}
+
+export function studentInCourse(student, courseName) {
+  return enrolledCourses(student).includes(courseName)
+}
+
 function formatStudent(row) {
+  const courses = parseCourseList(row.enrolled_courses, row.course)
   return {
     id: row.id,
     name: row.name,
-    course: row.course,
+    course: courses[0] ?? row.course,
+    courses,
     department: row.department,
     attendance: row.attendance,
     gpa: row.gpa,
@@ -179,7 +227,7 @@ export function getFacultyById(facultyId) {
       FROM users u
       JOIN roles r ON r.id = u.role_id
       LEFT JOIN departments d ON d.id = u.department_id
-      WHERE u.id = ? AND r.name = 'Faculty'
+      WHERE u.id = ? AND r.name IN ('Faculty', 'Department Head')
     `,
     )
     .get(facultyId)
@@ -225,7 +273,7 @@ export function getTopRiskStudents(user, limit = 5) {
 
 export function computeFacultyRiskSummary(facultyMembers, allStudents) {
   return facultyMembers.map((member) => {
-    const classStudents = allStudents.filter((s) => member.courses.includes(s.course))
+    const classStudents = allStudents.filter((s) => studentInAnyCourse(s, member.courses ?? []))
     const studentCount = classStudents.length
 
     if (studentCount === 0) {
@@ -248,4 +296,202 @@ export function computeFacultyRiskSummary(facultyMembers, allStudents) {
       riskLevel: scoreToRiskLevel(avgRiskScore),
     }
   })
+}
+
+function assertCanManageStudents(actor) {
+  if (!actor?.role) throw new AppError('Authentication required', 401, 'UNAUTHORIZED')
+  if (!INSTITUTION_WIDE_ROLES.has(actor.role)) {
+    throw new AppError('Insufficient permissions', 403, 'FORBIDDEN')
+  }
+}
+
+function mapManagedStudent(row) {
+  const courses = parseCourseList(row.courses, row.course)
+  return {
+    id: row.id,
+    name: row.name,
+    email: null,
+    workEmail: null,
+    role: ROLES.STUDENT,
+    department: row.department,
+    status: row.is_active ? 'Active' : 'Disabled',
+    courses,
+    kind: 'student',
+    invitedAt: null,
+    inviteExpiresAt: null,
+  }
+}
+
+const managedStudentSelect = `
+  SELECT
+    s.id,
+    s.name,
+    s.is_active,
+    c.display_name AS course,
+    d.name AS department,
+    (
+      SELECT GROUP_CONCAT(c2.display_name, '||')
+      FROM student_courses sc
+      JOIN courses c2 ON c2.id = sc.course_id
+      JOIN terms t ON t.id = sc.term_id AND t.is_current = 1
+      WHERE sc.student_id = s.id
+    ) AS courses
+  FROM students s
+  JOIN courses c ON c.id = s.course_id
+  JOIN departments d ON d.id = s.department_id
+`
+
+function resolveDepartmentCourses(departmentId, courseNames) {
+  const db = getDb()
+  const names = [...new Set((courseNames ?? []).map((name) => String(name).trim()).filter(Boolean))]
+  if (!names.length) throw new AppError('Assign at least one course to this student', 400, 'COURSES_REQUIRED')
+
+  const rows = names.map((name) => {
+    const course = db
+      .prepare('SELECT id, display_name FROM courses WHERE display_name = ? AND department_id = ?')
+      .get(name, departmentId)
+    if (!course) throw new AppError(`Unknown course for this department: ${name}`, 400, 'INVALID_COURSE')
+    return course
+  })
+
+  return rows
+}
+
+function syncStudentCourses(studentId, courseIds, termId) {
+  const db = getDb()
+  db.prepare('DELETE FROM student_courses WHERE student_id = ? AND term_id = ?').run(studentId, termId)
+  const insert = db.prepare(
+    `INSERT INTO student_courses (student_id, course_id, term_id) VALUES (?, ?, ?)`,
+  )
+  for (const courseId of courseIds) {
+    insert.run(studentId, courseId, termId)
+  }
+}
+
+function loadManagedStudent(id) {
+  const db = getDb()
+  const row = db.prepare(`${managedStudentSelect} WHERE s.id = ?`).get(id)
+  return row ? mapManagedStudent(row) : null
+}
+
+export function listManagedStudents({ search, status } = {}) {
+  const db = getDb()
+  let sql = `${managedStudentSelect} WHERE 1 = 1`
+  const params = []
+
+  if (search?.trim()) {
+    sql += ` AND (
+      LOWER(s.name) LIKE ?
+      OR LOWER(s.id) LIKE ?
+      OR LOWER(c.display_name) LIKE ?
+      OR EXISTS (
+        SELECT 1 FROM student_courses sc
+        JOIN courses c2 ON c2.id = sc.course_id
+        WHERE sc.student_id = s.id AND LOWER(c2.display_name) LIKE ?
+      )
+    )`
+    const q = `%${search.trim().toLowerCase()}%`
+    params.push(q, q, q, q)
+  }
+
+  if (status === 'Active') sql += ' AND s.is_active = 1'
+  if (status === 'Disabled') sql += ' AND s.is_active = 0'
+
+  sql += ' ORDER BY s.name'
+  return db.prepare(sql).all(...params).map(mapManagedStudent)
+}
+
+export function createStudent(payload, actor) {
+  assertCanManageStudents(actor)
+
+  const name = String(payload?.name ?? '').trim()
+  const departmentName = String(payload?.department ?? '').trim()
+  const courseNames = Array.isArray(payload?.courses)
+    ? payload.courses
+    : payload?.course
+      ? [payload.course]
+      : []
+
+  if (!name) throw new AppError('Student name is required', 400, 'VALIDATION_ERROR')
+  if (!departmentName) throw new AppError('Department is required', 400, 'INVALID_DEPARTMENT')
+
+  const db = getDb()
+  const dept = db.prepare('SELECT id FROM departments WHERE name = ?').get(departmentName)
+  if (!dept) throw new AppError('Invalid department', 400, 'INVALID_DEPARTMENT')
+
+  const courseRows = resolveDepartmentCourses(dept.id, courseNames)
+  const { id: termId } = getCurrentTerm()
+  const id = `STU-${Date.now().toString(36).toUpperCase()}`
+
+  const create = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO students (id, name, course_id, department_id, is_active) VALUES (?, ?, ?, ?, 1)`,
+    ).run(id, name, courseRows[0].id, dept.id)
+
+    syncStudentCourses(id, courseRows.map((row) => row.id), termId)
+
+    db.prepare(
+      `
+      INSERT INTO student_metrics
+        (student_id, term_id, attendance, gpa, lms_activity, late_assignments, risk_score, risk_level, trend)
+      VALUES (?, ?, 100, 4.0, 100, 0, 8, 'Low', 'flat')
+    `,
+    ).run(id, termId)
+  })
+
+  create()
+  return { user: loadManagedStudent(id), added: true }
+}
+
+export function updateStudent(id, payload, actor) {
+  assertCanManageStudents(actor)
+  const existing = loadManagedStudent(id)
+  if (!existing) throw new AppError('Student not found', 404, 'STUDENT_NOT_FOUND')
+
+  const name = String(payload?.name ?? existing.name).trim()
+  const departmentName = String(payload?.department ?? existing.department).trim()
+  const courseNames = Array.isArray(payload?.courses) && payload.courses.length
+    ? payload.courses
+    : existing.courses
+
+  const db = getDb()
+  const dept = db.prepare('SELECT id FROM departments WHERE name = ?').get(departmentName)
+  if (!dept) throw new AppError('Invalid department', 400, 'INVALID_DEPARTMENT')
+
+  const courseRows = resolveDepartmentCourses(dept.id, courseNames)
+  const { id: termId } = getCurrentTerm()
+
+  const update = db.transaction(() => {
+    db.prepare(
+      `
+      UPDATE students
+      SET name = ?, course_id = ?, department_id = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    ).run(name, courseRows[0].id, dept.id, id)
+
+    syncStudentCourses(id, courseRows.map((row) => row.id), termId)
+  })
+
+  update()
+  return loadManagedStudent(id)
+}
+
+export function toggleStudentStatus(id, actor) {
+  assertCanManageStudents(actor)
+  const db = getDb()
+  const row = db.prepare('SELECT is_active FROM students WHERE id = ?').get(id)
+  if (!row) throw new AppError('Student not found', 404, 'STUDENT_NOT_FOUND')
+  db.prepare(
+    `UPDATE students SET is_active = ?, updated_at = datetime('now') WHERE id = ?`,
+  ).run(row.is_active ? 0 : 1, id)
+  return loadManagedStudent(id)
+}
+
+export function deleteStudent(id, actor) {
+  assertCanManageStudents(actor)
+  const db = getDb()
+  const result = db.prepare('DELETE FROM students WHERE id = ?').run(id)
+  if (result.changes === 0) throw new AppError('Student not found', 404, 'STUDENT_NOT_FOUND')
+  return { id }
 }

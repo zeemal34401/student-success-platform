@@ -11,6 +11,17 @@ export const loginRateLimiter = rateLimit({
   },
 })
 
+export const passwordResetRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { message: 'Too many reset requests. Try again later.', code: 'RATE_LIMITED' },
+  },
+})
+
 export const apiRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 300,

@@ -1,130 +1,213 @@
-import { useEffect, useState } from 'react'
-import { ChevronRight, Search, SearchX, Users } from 'lucide-react'
-import { Card, PageLayout, RiskBadge, SectionHeader } from '../components/ui'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, GraduationCap, Search, Shield, Users } from 'lucide-react'
+import { Card, PageLayout, RiskBadge, StatusBadge } from '../components/ui'
 import { api } from '../api/client'
+import { ROLES } from '../constants/roles'
 
-export default function StudentSearch({ user, onSelectStudent }) {
+const FACULTY_ROLES = new Set([ROLES.FACULTY, ROLES.DEPARTMENT_HEAD])
+const ADMIN_ROLES = new Set([ROLES.DIRECTOR, ROLES.ADMIN, ROLES.STAFF])
+
+function displayRole(role) {
+  if (role === ROLES.DEPARTMENT_HEAD) return 'Faculty'
+  if (role === ROLES.STAFF) return 'Academic Admin'
+  return role
+}
+
+function personMatchesFilter(person, filter) {
+  if (filter === 'all') return true
+  if (filter === 'students') return person.kind === 'student'
+  if (filter === 'faculty') return person.kind === 'staff' && FACULTY_ROLES.has(person.role)
+  if (filter === 'admins') return person.kind === 'staff' && ADMIN_ROLES.has(person.role)
+  return true
+}
+
+export default function StudentSearch({ user, onSelectStudent, onSelectStaff, onBack }) {
+  const isDirectorySearch =
+    user?.role === ROLES.DIRECTOR || user?.role === ROLES.ADMIN || user?.role === ROLES.STAFF
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [filter, setFilter] = useState('all')
   const [results, setResults] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  const trimmedQuery = query.trim()
-  const hasQuery = trimmedQuery.length > 0
+  const [isSearching, setIsSearching] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!hasQuery) {
-      setResults([])
-      setError(null)
-      return undefined
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), 250)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function runSearch() {
+      if (!debouncedQuery) {
+        setResults([])
+        setIsSearching(false)
+        setError('')
+        return
+      }
+
+      setIsSearching(true)
+      setError('')
+      try {
+        const data = await api.searchPeople(debouncedQuery)
+        if (!cancelled) setResults(Array.isArray(data) ? data : [])
+      } catch (err) {
+        if (!cancelled) {
+          setResults([])
+          setError(err.message ?? 'Search failed. Please try again.')
+        }
+      } finally {
+        if (!cancelled) setIsSearching(false)
+      }
     }
 
-    const timer = setTimeout(async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const data = await api.searchStudents(trimmedQuery)
-        setResults(data)
-      } catch (err) {
-        setError(err)
-        setResults([])
-      } finally {
-        setLoading(false)
-      }
-    }, 300)
+    runSearch()
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedQuery])
 
-    return () => clearTimeout(timer)
-  }, [trimmedQuery, hasQuery])
+  const filteredResults = useMemo(
+    () => results.filter((person) => personMatchesFilter(person, filter)),
+    [results, filter],
+  )
+
+  const counts = useMemo(() => ({
+    all: results.length,
+    students: results.filter((person) => person.kind === 'student').length,
+    faculty: results.filter((person) => person.kind === 'staff' && FACULTY_ROLES.has(person.role)).length,
+    admins: results.filter((person) => person.kind === 'staff' && ADMIN_ROLES.has(person.role)).length,
+  }), [results])
+
+  function handleSelect(person) {
+    if (person.kind === 'student') {
+      onSelectStudent?.(person.id)
+      return
+    }
+    onSelectStaff?.(person)
+  }
+
+  const filters = [
+    { id: 'all', label: 'All', count: counts.all },
+    { id: 'students', label: 'Students', count: counts.students },
+    { id: 'faculty', label: 'Faculty', count: counts.faculty },
+    { id: 'admins', label: 'Admins', count: counts.admins },
+  ]
 
   return (
-    <PageLayout size="narrow">
-      <SectionHeader as="h2" title="Student Search" description="Find a student by name, ID, or course to view their full profile." />
-
-      <div className="relative mt-6">
-        <Search size={20} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-        <input
-          id="student-search"
-          type="search"
-          autoFocus
-          placeholder="Search by name, student ID, or course…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="input-field py-4 pl-12 text-base shadow-card"
-        />
+    <PageLayout>
+      <div className="mb-4 flex items-center gap-2">
+        <button type="button" onClick={onBack} className="btn-ghost -ml-2">
+          <ArrowLeft size={16} aria-hidden="true" />
+          Back
+        </button>
       </div>
 
-      {!hasQuery && (
-        <Card className="mt-6">
-          <div className="flex flex-col items-center py-14 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600">
-              <Users size={26} aria-hidden="true" />
-            </div>
-            <h2 className="mt-4 text-base font-semibold text-text-primary">Search for a student</h2>
-            <p className="mt-1 max-w-sm text-sm text-text-secondary">
-              Start typing a student name, ID (e.g. STU-1001), or course code to see matching results.
-            </p>
-          </div>
-        </Card>
-      )}
+      <Card>
+        <label htmlFor="directory-search" className="sr-only">
+          {isDirectorySearch ? 'Search students, faculty, and administrators' : 'Search students'}
+        </label>
+        <div className="relative">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+          <input
+            id="directory-search"
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={
+              isDirectorySearch
+                ? 'Search by name, email, role, department, or student ID'
+                : 'Search by student name, ID, or course'
+            }
+            className="w-full rounded-lg border border-border bg-surface py-2.5 pl-9 pr-3 text-sm text-text-primary outline-none ring-primary-600/20 placeholder:text-text-muted focus:border-primary-600 focus:ring-2"
+            autoFocus
+          />
+        </div>
 
-      {hasQuery && loading && (
-        <Card className="mt-6">
-          <div className="space-y-3 py-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="animate-skeleton h-16 w-full rounded-md bg-border/80" />
+        {isDirectorySearch && (
+          <div className="mt-3 flex flex-wrap gap-2" role="tablist" aria-label="Search filters">
+            {filters.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={filter === item.id}
+                onClick={() => setFilter(item.id)}
+                className={[
+                  'rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                  filter === item.id
+                    ? 'border-primary-600 bg-primary-50 text-primary-700'
+                    : 'border-border bg-surface text-text-secondary hover:bg-background',
+                ].join(' ')}
+              >
+                {item.label}
+                <span className="ml-1 tabular-nums opacity-70">{item.count}</span>
+              </button>
             ))}
           </div>
-        </Card>
-      )}
+        )}
+      </Card>
 
-      {hasQuery && error && (
-        <Card className="mt-6 border-risk-critical-border bg-risk-critical-bg px-4 py-3 text-sm text-risk-critical">
-          {error.message}
-        </Card>
-      )}
-
-      {hasQuery && !loading && !error && results.length === 0 && (
-        <Card className="mt-6">
-          <div className="flex flex-col items-center py-14 text-center">
-            <SearchX size={26} className="text-primary-600" aria-hidden="true" />
-            <h2 className="mt-4 text-base font-semibold text-text-primary">No students found</h2>
-            <p className="mt-1 max-w-sm text-sm text-text-secondary">
-              No results match &ldquo;{trimmedQuery}&rdquo;. Try a different name, ID, or course.
-            </p>
-          </div>
-        </Card>
-      )}
-
-      {hasQuery && !loading && results.length > 0 && (
-        <div className="mt-6">
-          <p className="mb-3 text-sm text-text-secondary">
-            {results.length} {results.length === 1 ? 'result' : 'results'} for &ldquo;{trimmedQuery}&rdquo;
+      <div className="mt-4">
+        {error ? (
+          <p className="text-sm text-red-600">{error}</p>
+        ) : isSearching ? (
+          <p className="text-sm text-text-muted">Searching…</p>
+        ) : filteredResults.length === 0 ? (
+          <p className="text-sm text-text-muted">
+            {debouncedQuery
+              ? 'No matching people found.'
+              : isDirectorySearch
+                ? 'Start typing to search students, faculty, and administrators.'
+                : 'Start typing to search students.'}
           </p>
-          <ul className="space-y-3">
-            {results.map((student) => (
-              <li key={student.id}>
+        ) : (
+          <ul className="space-y-2">
+            {filteredResults.map((person) => (
+              <li key={`${person.kind}-${person.id}`}>
                 <button
                   type="button"
-                  onClick={() => onSelectStudent?.(student.id)}
-                  className="group w-full rounded-lg border border-border bg-surface p-4 text-left shadow-card transition-all duration-150 hover:border-primary-500 hover:bg-primary-50/40 hover:shadow-card-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+                  onClick={() => handleSelect(person)}
+                  className="w-full rounded-xl border border-border bg-surface p-4 text-left transition-colors hover:border-primary-200 hover:bg-primary-50/40"
                 >
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-text-primary group-hover:text-primary-700">{student.name}</p>
-                        <RiskBadge level={student.riskLevel} score={student.riskScore} />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <PersonIcon person={person} />
+                        <p className="truncate font-heading text-sm font-semibold text-text-primary">{person.name}</p>
                       </div>
-                      <p className="mt-0.5 truncate text-sm text-text-secondary">{student.course}</p>
-                      <p className="mt-0.5 text-xs text-text-muted">{student.id} · {student.department}</p>
+                      <p className="mt-1 truncate text-xs text-text-muted">
+                        {person.kind === 'student'
+                          ? `${person.id} · ${person.course ?? 'Course'} · ${person.department}`
+                          : `${person.email} · ${person.department}`}
+                      </p>
                     </div>
-                    <ChevronRight size={18} className="shrink-0 text-text-muted transition-colors group-hover:text-primary-600" aria-hidden="true" />
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="rounded-badge border border-border bg-background px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+                        {displayRole(person.role)}
+                      </span>
+                      {person.kind === 'student' && person.riskLevel ? (
+                        <RiskBadge level={person.riskLevel} score={person.riskScore} />
+                      ) : null}
+                      {person.kind === 'staff' && person.status ? (
+                        <StatusBadge status={person.status} />
+                      ) : null}
+                    </div>
                   </div>
                 </button>
               </li>
             ))}
           </ul>
-        </div>
-      )}
+        )}
+      </div>
     </PageLayout>
   )
+}
+
+function PersonIcon({ person }) {
+  const className = 'mt-0.5 shrink-0 text-text-muted'
+  if (person.kind === 'student') return <GraduationCap size={16} className={className} aria-hidden="true" />
+  if (FACULTY_ROLES.has(person.role)) return <Users size={16} className={className} aria-hidden="true" />
+  return <Shield size={16} className={className} aria-hidden="true" />
 }

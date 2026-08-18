@@ -22,7 +22,28 @@ export function createApp() {
     }),
   )
   app.use(express.json({ limit: '1mb' }))
+
+  const avatarsPath = path.resolve(__dirname, 'data/avatars')
+  fs.mkdirSync(avatarsPath, { recursive: true })
+  const avatarStatic = express.static(avatarsPath, {
+    maxAge: '7d',
+    fallthrough: true,
+  })
+  app.use('/api/uploads/avatars', avatarStatic)
+  app.use('/uploads/avatars', avatarStatic)
+
   app.use('/api', apiRateLimiter, apiRoutes)
+
+  const resetPagePath = path.join(__dirname, 'pages/reset-password.html')
+  app.get('/reset-password', (req, res, next) => {
+    if (fs.existsSync(resetPagePath)) {
+      return res.sendFile(resetPagePath)
+    }
+    if (fs.existsSync(distPath)) {
+      return res.sendFile(path.join(distPath, 'index.html'))
+    }
+    return next()
+  })
 
   if (fs.existsSync(distPath)) {
     app.use(express.static(distPath))

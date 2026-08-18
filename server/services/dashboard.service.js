@@ -1,11 +1,14 @@
 import { getDb } from '../db/connection.js'
 import { getCurrentTerm } from './auth.service.js'
+import { AppError } from '../utils/response.js'
 import {
   computeFacultyRiskSummary,
   computeStudentStats,
   getFacultyById,
   getTopRiskStudents,
   listStudents,
+  studentInAnyCourse,
+  studentInCourse,
   ROLES,
 } from './students.service.js'
 import { generateEngagementTrend } from '../utils/risk.js'
@@ -110,7 +113,7 @@ export function getFacultyOverview(user) {
         .all(row.id, termId)
         .map((c) => c.course)
 
-      const sectionStudents = deptStudents.filter((s) => courses.includes(s.course))
+      const sectionStudents = deptStudents.filter((s) => studentInAnyCourse(s, courses))
       const studentCount = sectionStudents.length
       const atRiskCount = sectionStudents.filter(
         (s) => s.riskLevel === 'Critical' || s.riskLevel === 'High',
@@ -254,8 +257,15 @@ function getDepartmentComparison() {
   const allStudents = listStudents({ role: ROLES.ADMIN })
 
   const departments = db.prepare('SELECT id, name FROM departments ORDER BY name').all()
+  const uniqueDepartments = []
+  const seenNames = new Set()
+  for (const dept of departments) {
+    if (seenNames.has(dept.name)) continue
+    seenNames.add(dept.name)
+    uniqueDepartments.push(dept)
+  }
 
-  return departments.map((dept) => {
+  return uniqueDepartments.map((dept) => {
     const deptStudents = allStudents.filter((s) => s.department === dept.name)
     const enrolled = deptStudents.length
     const atRiskCount = deptStudents.filter(
@@ -286,6 +296,7 @@ function getDepartmentComparison() {
       .get(dept.id, termId)
 
     return {
+      id: dept.id,
       department: dept.name,
       enrolled: snapshot?.totalStudents ?? enrolled,
       sampleEnrolled: enrolled,
@@ -297,6 +308,127 @@ function getDepartmentComparison() {
       riskShare: enrolled > 0 ? Math.round((atRiskCount / enrolled) * 100) : 0,
     }
   })
+}
+
+function summarizeGroup(students) {
+  const enrolled = students.length
+  const atRiskCount = students.filter(
+    (s) => s.riskLevel === 'Critical' || s.riskLevel === 'High',
+  ).length
+  const criticalCount = students.filter((s) => s.riskLevel === 'Critical').length
+  const avgAttendance =
+    enrolled > 0 ? Math.round(students.reduce((sum, s) => sum + s.attendance, 0) / enrolled) : 0
+  const avgGpa =
+    enrolled > 0 ? Number((students.reduce((sum, s) => sum + s.gpa, 0) / enrolled).toFixed(2)) : 0
+  const riskShare = enrolled > 0 ? Math.round((atRiskCount / enrolled) * 100) : 0
+
+  return { enrolled, atRiskCount, criticalCount, avgAttendance, avgGpa, riskShare }
+}
+
+function assertDirectorScope(user) {
+  if (user?.role !== ROLES.DIRECTOR && user?.role !== ROLES.ADMIN && user?.role !== ROLES.STAFF) {
+    throw new AppError('Insufficient permissions', 403, 'FORBIDDEN')
+  }
+}
+
+/** Director Academic Insights — department comparison rows */
+export function getDirectorDepartments(user) {
+  assertDirectorScope(user)
+  return getDepartmentComparison()
+}
+
+/** Faculty in a department with the same comparison metrics */
+export function getDirectorDepartmentFaculty(user, departmentName) {
+  assertDirectorScope(user)
+  if (!departmentName?.trim()) throw new AppError('Department is required', 400, 'VALIDATION_ERROR')
+
+  const db = getDb()
+  const { id: termId } = getCurrentTerm()
+  const department = departmentName.trim()
+  const allStudents = listStudents({ role: ROLES.ADMIN }).filter((s) => s.department === department)
+
+  const faculty = db
+    .prepare(
+      `
+      SELECT DISTINCT u.id, u.name, u.email, r.name AS role_name
+      FROM users u
+      JOIN roles r ON r.id = u.role_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      LEFT JOIN faculty_courses fc ON fc.user_id = u.id AND fc.term_id = ?
+      LEFT JOIN courses c ON c.id = fc.course_id
+      LEFT JOIN departments cd ON cd.id = c.department_id
+      WHERE r.name IN ('Faculty', 'Department Head')
+        AND u.status = 'Active'
+        AND (d.name = ? OR cd.name = ?)
+      ORDER BY u.name
+    `,
+    )
+    .all(termId, department, department)
+
+  return faculty.map((row) => {
+    const courses = db
+      .prepare(
+        `
+        SELECT c.display_name AS course
+        FROM faculty_courses fc
+        JOIN courses c ON c.id = fc.course_id
+        WHERE fc.user_id = ? AND fc.term_id = ?
+        ORDER BY c.display_name
+      `,
+      )
+      .all(row.id, termId)
+      .map((c) => c.course)
+
+    const sectionStudents = allStudents.filter((s) => studentInAnyCourse(s, courses))
+    return {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      department,
+      role: row.role_name,
+      courseCount: courses.length,
+      ...summarizeGroup(sectionStudents),
+    }
+  })
+}
+
+/** Courses taught by a faculty member, with comparison metrics */
+export function getDirectorFacultyCourses(user, facultyId) {
+  assertDirectorScope(user)
+  const faculty = getFacultyById(facultyId)
+  if (!faculty) throw new AppError('Faculty member not found', 404, 'FACULTY_NOT_FOUND')
+
+  const allStudents = listStudents({ role: ROLES.ADMIN })
+  const departmentStudents = faculty.department
+    ? allStudents.filter((s) => s.department === faculty.department)
+    : allStudents
+
+  return (faculty.courses ?? []).map((course) => {
+    const courseStudents = departmentStudents.filter((s) => studentInCourse(s, course))
+    return {
+      course,
+      facultyId: faculty.id,
+      facultyName: faculty.name,
+      department: faculty.department ?? null,
+      ...summarizeGroup(courseStudents),
+    }
+  })
+}
+
+/** Students in a faculty member's course */
+export function getDirectorCourseStudents(user, facultyId, courseName) {
+  assertDirectorScope(user)
+  if (!courseName?.trim()) throw new AppError('Course is required', 400, 'VALIDATION_ERROR')
+
+  const faculty = getFacultyById(facultyId)
+  if (!faculty) throw new AppError('Faculty member not found', 404, 'FACULTY_NOT_FOUND')
+
+  return listStudents(
+    { role: ROLES.ADMIN },
+    { facultyId, department: faculty.department ?? undefined },
+  )
+    .filter((s) => studentInCourse(s, courseName.trim()))
+    .sort((a, b) => b.riskScore - a.riskScore)
 }
 
 function getFacultyCourseStats() {
@@ -331,7 +463,7 @@ function getFacultyCourseStats() {
       .all(row.id, termId)
       .map((c) => c.course)
 
-    const sectionStudents = allStudents.filter((s) => courses.includes(s.course))
+    const sectionStudents = allStudents.filter((s) => studentInAnyCourse(s, courses))
     const studentCount = sectionStudents.length
     const atRiskCount = sectionStudents.filter(
       (s) => s.riskLevel === 'Critical' || s.riskLevel === 'High',

@@ -28,6 +28,7 @@ export function useAsyncData(fetcher, deps = []) {
     async function load() {
       setLoading(true)
       setError(null)
+      setData(null)
 
       try {
         const result = await fetcherRef.current()

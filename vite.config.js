@@ -6,8 +6,16 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   appType: 'spa',
   server: {
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: true,
+    allowedHosts: true,
     proxy: {
       '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/uploads': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },

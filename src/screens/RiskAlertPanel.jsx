@@ -85,7 +85,7 @@ export default function RiskAlertPanel({
   onClearDepartmentFilter,
   onSelectStudent,
 }) {
-  const isDirectorView = user?.role === ROLES.DIRECTOR || user?.role === ROLES.ADMIN || user?.role === ROLES.STAFF
+  const isDirectorView = user?.role === ROLES.ADMIN || user?.role === ROLES.STAFF
   const [search, setSearch] = useState('')
   const [riskFilter, setRiskFilter] = useState(() => (isDirectorView ? 'Critical' : 'All'))
   const [sortField, setSortField] = useState('riskScore')
@@ -195,7 +195,7 @@ export default function RiskAlertPanel({
     Boolean(facultyFilter) ||
     Boolean(departmentFilter)
 
-  const pageTitle = user?.role === ROLES.DIRECTOR ? 'High-Risk Students' : 'Risk Alert Panel'
+  const pageTitle = user?.role === ROLES.DIRECTOR ? 'Academic Insights' : 'Risk Alert Panel'
   const pageDescription = isDirectorView
     ? `Students arranged by department and course in ${scopeLabel}.`
     : `Search and filter students in ${scopeLabel}. Click a row to view details.`

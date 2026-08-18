@@ -25,7 +25,7 @@ const C = {
   dangerBg: '#FEF3F2',
 }
 
-export default function AcceptInvite({ token, onAccepted }) {
+export default function AcceptInvite({ token, onAccepted, onUseAsReset }) {
   const [invite, setInvite] = useState(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -44,6 +44,15 @@ export default function AcceptInvite({ token, onAccepted }) {
         const data = await api.getInvite(token)
         if (!cancelled) setInvite(data)
       } catch (err) {
+        if (err.code === 'INVITE_NOT_FOUND' && onUseAsReset) {
+          try {
+            await api.getPasswordReset(token)
+            if (!cancelled) onUseAsReset()
+            return
+          } catch {
+            // Not a reset link either — show the invitation error.
+          }
+        }
         if (!cancelled) setError(err.message ?? 'Unable to load invitation')
       } finally {
         if (!cancelled) setLoading(false)

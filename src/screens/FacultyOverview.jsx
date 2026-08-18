@@ -142,7 +142,6 @@ export default function FacultyOverview({ user, onSelectFaculty }) {
           icon={AlertTriangle}
           iconTone="amber"
           topBorderColor="#F79009"
-          tintBackgroundColor="#FFFAEB"
         />
         <StatCard
           label="Faculty w/ Critical"
@@ -151,7 +150,6 @@ export default function FacultyOverview({ user, onSelectFaculty }) {
           icon={AlertTriangle}
           iconTone="critical"
           topBorderColor="#D92D20"
-          tintBackgroundColor="#FEF6F6"
         />
       </div>
 

@@ -5,6 +5,7 @@ import { env } from '../config/env.js'
 import { getDb } from '../db/connection.js'
 import { AppError } from '../utils/response.js'
 import { ROLES } from '../constants/roles.js'
+import { getSmtpConfigStatus, sendPasswordResetEmail } from './email.service.js'
 
 const ROLE_NAMES = {
   faculty: ROLES.FACULTY,
@@ -32,6 +33,9 @@ export function mapUserRow(row, courses = []) {
     role: row.role_name,
     department: row.department_name ?? undefined,
     status: row.status,
+    avatarUrl: row.avatar_url
+      ? `${row.avatar_url}${row.updated_at ? `?v=${encodeURIComponent(row.updated_at)}` : ''}`
+      : null,
     courses: courses.length ? courses : undefined,
   }
 }
@@ -41,7 +45,7 @@ export function loadUserById(userId) {
   const row = db
     .prepare(
       `
-      SELECT u.id, u.email, u.name, u.status, r.name AS role_name, d.name AS department_name
+      SELECT u.id, u.email, u.name, u.status, u.avatar_url, u.updated_at, r.name AS role_name, d.name AS department_name
       FROM users u
       JOIN roles r ON r.id = u.role_id
       LEFT JOIN departments d ON d.id = u.department_id
@@ -87,7 +91,16 @@ export function login(email, password, role) {
   if (!row) throw new AppError('Invalid email, password, or role', 401, 'INVALID_CREDENTIALS')
   if (row.status === 'Disabled') throw new AppError('Account is disabled', 403, 'ACCOUNT_DISABLED')
   if (row.status === 'Invited') throw new AppError('Please accept your invitation before signing in', 403, 'ACCOUNT_INVITED')
-  if (row.role_name !== role) throw new AppError('Invalid email, password, or role', 401, 'INVALID_CREDENTIALS')
+
+  // Merged-role login support:
+  // - Department Head behaves like Faculty
+  // - Administrative Staff behaves like Academic Admin
+  const roleMatches =
+    row.role_name === role ||
+    (role === ROLES.FACULTY && row.role_name === ROLES.DEPARTMENT_HEAD) ||
+    (role === ROLES.ADMIN && row.role_name === ROLES.STAFF)
+
+  if (!roleMatches) throw new AppError('Invalid email, password, or role', 401, 'INVALID_CREDENTIALS')
   if (!bcrypt.compareSync(password, row.password_hash)) {
     throw new AppError('Invalid email, password, or role', 401, 'INVALID_CREDENTIALS')
   }
@@ -313,6 +326,162 @@ export function acceptInvite(rawToken, password) {
   db.prepare(`UPDATE users SET last_login_at = datetime('now') WHERE id = ?`).run(userRow.id)
 
   return { token, user: loadUserById(userRow.id) }
+}
+
+function buildResetUrl(rawToken) {
+  const token = encodeURIComponent(rawToken)
+  if (env.isProduction) {
+    const origin = String(env.appBaseUrl || '').replace(/\/$/, '')
+    if (!origin || /localhost|127\.0\.0\.1/i.test(origin)) {
+      throw new AppError(
+        'APP_BASE_URL must be your public application URL so reset emails contain a reachable link.',
+        500,
+        'INVALID_APP_BASE_URL',
+      )
+    }
+    return `${origin}/reset-password?token=${token}`
+  }
+
+  // Windows often refuses the LAN IP. Same-PC Gmail/Chrome can open localhost Vite.
+  return `http://localhost:5173/reset-password?token=${token}`
+}
+
+const GENERIC_RESET_RESPONSE = {
+  sent: true,
+  message: 'If an account exists for that email, a reset link has been sent.',
+}
+
+export async function requestPasswordReset(email) {
+  const address = String(email ?? '').trim().toLowerCase()
+  if (!address || !address.includes('@')) {
+    throw new AppError('Enter a valid email address.', 400, 'INVALID_EMAIL')
+  }
+
+  const smtp = getSmtpConfigStatus()
+  if (!smtp.configured) {
+    throw new AppError(smtp.reason, 503, 'EMAIL_NOT_CONFIGURED')
+  }
+
+  const db = getDb()
+  const user = db
+    .prepare(
+      `
+      SELECT u.id, u.name, u.email, u.work_email, u.status
+      FROM users u
+      WHERE LOWER(u.email) = ? OR LOWER(COALESCE(u.work_email, '')) = ?
+    `,
+    )
+    .get(address, address)
+
+  if (!user || user.status !== 'Active') {
+    return GENERIC_RESET_RESPONSE
+  }
+
+  db.prepare(
+    `
+    UPDATE password_reset_tokens
+    SET used_at = datetime('now')
+    WHERE user_id = ? AND used_at IS NULL
+  `,
+  ).run(user.id)
+
+  const rawToken = crypto.randomBytes(32).toString('hex')
+  const expiresAt = new Date(Date.now() + env.passwordResetExpiryMinutes * 60 * 1000).toISOString()
+
+  db.prepare(
+    `
+    INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
+    VALUES (?, ?, ?, ?)
+  `,
+  ).run(crypto.randomUUID(), user.id, hashToken(rawToken), expiresAt)
+
+  const resetUrl = buildResetUrl(rawToken)
+  await sendPasswordResetEmail({
+    to: address,
+    name: user.name,
+    resetUrl,
+  })
+
+  return env.isProduction ? GENERIC_RESET_RESPONSE : { ...GENERIC_RESET_RESPONSE, resetUrl }
+}
+
+export function getPasswordResetByToken(rawToken) {
+  if (!rawToken?.trim()) throw new AppError('Reset token is required', 400, 'TOKEN_REQUIRED')
+
+  const db = getDb()
+  const row = db
+    .prepare(
+      `
+      SELECT t.id, t.expires_at, t.used_at, u.name, u.email, u.status
+      FROM password_reset_tokens t
+      JOIN users u ON u.id = t.user_id
+      WHERE t.token_hash = ?
+    `,
+    )
+    .get(hashToken(rawToken.trim()))
+
+  if (!row || row.used_at) {
+    throw new AppError('This reset link is invalid or has already been used.', 404, 'RESET_NOT_FOUND')
+  }
+  if (row.status === 'Disabled') {
+    throw new AppError('This account has been disabled.', 403, 'ACCOUNT_DISABLED')
+  }
+  if (new Date(row.expires_at) < new Date()) {
+    throw new AppError('This reset link has expired. Request a new one from the sign-in page.', 410, 'RESET_EXPIRED')
+  }
+
+  return { name: row.name, email: row.email, expiresAt: row.expires_at }
+}
+
+export function resetPassword(rawToken, password) {
+  if (!rawToken?.trim()) throw new AppError('Reset token is required', 400, 'TOKEN_REQUIRED')
+  if (!password || password.length < 8) {
+    throw new AppError('Password must be at least 8 characters', 400, 'WEAK_PASSWORD')
+  }
+
+  const db = getDb()
+  const row = db
+    .prepare(
+      `
+      SELECT t.id, t.user_id, t.expires_at, t.used_at, u.status
+      FROM password_reset_tokens t
+      JOIN users u ON u.id = t.user_id
+      WHERE t.token_hash = ?
+    `,
+    )
+    .get(hashToken(rawToken.trim()))
+
+  if (!row || row.used_at) {
+    throw new AppError('This reset link is invalid or has already been used.', 404, 'RESET_NOT_FOUND')
+  }
+  if (row.status === 'Disabled') {
+    throw new AppError('This account has been disabled.', 403, 'ACCOUNT_DISABLED')
+  }
+  if (new Date(row.expires_at) < new Date()) {
+    throw new AppError('This reset link has expired. Request a new one from the sign-in page.', 410, 'RESET_EXPIRED')
+  }
+
+  const passwordHash = bcrypt.hashSync(password, 10)
+
+  db.prepare(
+    `
+    UPDATE users
+    SET password_hash = ?,
+        password_set_at = datetime('now'),
+        updated_at = datetime('now')
+    WHERE id = ?
+  `,
+  ).run(passwordHash, row.user_id)
+
+  db.prepare(`UPDATE password_reset_tokens SET used_at = datetime('now') WHERE id = ?`).run(row.id)
+  db.prepare(
+    `UPDATE password_reset_tokens SET used_at = datetime('now') WHERE user_id = ? AND used_at IS NULL`,
+  ).run(row.user_id)
+  db.prepare(
+    `UPDATE auth_sessions SET revoked_at = datetime('now') WHERE user_id = ? AND revoked_at IS NULL`,
+  ).run(row.user_id)
+
+  return { reset: true }
 }
 
 export { ROLE_NAMES }

@@ -61,7 +61,6 @@ export default function DepartmentDashboard({ user }) {
           icon={AlertTriangle}
           iconTone="critical"
           topBorderColor={CRITICAL}
-          tintBackgroundColor="#FEF6F6"
         />
         <StatCard
           label="Avg GPA"

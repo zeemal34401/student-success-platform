@@ -7,7 +7,7 @@
     "app": "node scripts/run-app.js",
     "dev": "npm run dev:stack",
     "dev:stack": "concurrently -n api,web -c green,cyan \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:client": "vite --port 5173 --strictPort",
+    "dev:client": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "dev:server": "node --watch server/index.js",
     "postinstall": "node scripts/ensure-ready.js",
     "setup": "node scripts/ensure-ready.js",

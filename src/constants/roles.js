@@ -4,6 +4,7 @@ export const ROLES = {
   DEPARTMENT_HEAD: 'Department Head',
   FACULTY: 'Faculty',
   STAFF: 'Administrative Staff',
+  STUDENT: 'Student',
 }
 
 export const ROLE_HIERARCHY = [

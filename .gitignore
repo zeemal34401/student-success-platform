@@ -9,6 +9,10 @@ node_modules/
 server/data/*.db
 server/data/*.db-*
 
+# User avatars
+server/data/avatars/*
+!server/data/avatars/.gitkeep
+
 # Build
 dist/
 

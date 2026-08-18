@@ -261,6 +261,111 @@ export async function sendInviteEmail({ to, name, role, department, courses, inv
   }
 }
 
+function buildPasswordResetHtml({ name, resetUrl, localUrl, expiryMinutes }) {
+  return `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#F8FAFC;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#0F172A;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F8FAFC;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width:560px;background:#ffffff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
+          <tr>
+            <td style="background:#2C3546;padding:24px 28px;color:#ffffff;">
+              <p style="margin:0;font-size:13px;opacity:0.85;">PrognosEd · Student Success Platform</p>
+              <h1 style="margin:8px 0 0;font-size:22px;font-weight:600;">Reset your password</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Hello ${escapeHtml(name)},</p>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#475467;">
+                We received a request to reset the password for your PrognosEd account.
+                If you made this request, use the button below to choose a new password.
+              </p>
+              <p style="margin:0 0 28px;">
+                <a href="${escapeHtml(resetUrl)}"
+                   style="display:inline-block;background:#0B6E4F;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">
+                  Reset password
+                </a>
+              </p>
+              <p style="margin:0 0 12px;font-size:12px;line-height:1.5;color:#98A2B3;">
+                Or paste this link into your browser:<br />
+                <a href="${escapeHtml(resetUrl)}" style="color:#0B6E4F;word-break:break-all;">${escapeHtml(resetUrl)}</a>
+              </p>
+              ${
+                localUrl && localUrl !== resetUrl
+                  ? `<p style="margin:0 0 12px;font-size:12px;line-height:1.5;color:#98A2B3;">
+                If you are on the computer running PrognosEd, use this link instead:<br />
+                <a href="${escapeHtml(localUrl)}" style="color:#0B6E4F;word-break:break-all;">${escapeHtml(localUrl)}</a>
+              </p>`
+                  : ''
+              }
+              <p style="margin:0;font-size:12px;line-height:1.5;color:#98A2B3;">
+                This link expires in ${expiryMinutes} minutes and can be used once.
+                If you did not request a reset, you can ignore this email — your password will stay the same.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim()
+}
+
+export async function sendPasswordResetEmail({ to, name, resetUrl }) {
+  assertSmtpConfigured()
+
+  if (!to?.trim()) {
+    throw new AppError('Reset recipient email is missing.', 400, 'INVALID_EMAIL')
+  }
+
+  const expiryMinutes = env.passwordResetExpiryMinutes
+  const localUrl = `http://localhost:${env.port}/reset-password?token=${new URL(resetUrl).searchParams.get('token') ?? ''}`
+  const subject = 'Reset your PrognosEd password'
+  const text = [
+    `Hello ${name},`,
+    '',
+    'We received a request to reset the password for your PrognosEd account.',
+    'If you made this request, open this link to choose a new password:',
+    resetUrl,
+    localUrl !== resetUrl ? `\nIf you are on the computer running PrognosEd, use:\n${localUrl}\n` : '',
+    `This link expires in ${expiryMinutes} minutes and can be used once.`,
+    'If you did not request a reset, ignore this email — your password will stay the same.',
+    '',
+    '— PrognosEd',
+  ].filter(Boolean).join('\n')
+
+  try {
+    const transport = getTransporter()
+    const info = await transport.sendMail({
+      from: env.email.from,
+      to: to.trim(),
+      subject,
+      text,
+      html: buildPasswordResetHtml({ name, resetUrl, localUrl, expiryMinutes }),
+    })
+
+    if (info.rejected?.length) {
+      console.error('[email] SMTP rejected password-reset recipients:', info.rejected)
+      throw new AppError(
+        'Unable to send the reset email. Confirm the mailbox can receive mail.',
+        502,
+        'EMAIL_DELIVERY_FAILED',
+      )
+    }
+
+    console.log(`[email] Password reset sent to ${to} (messageId=${info.messageId ?? 'n/a'})`)
+    return { delivered: true, messageId: info.messageId ?? null }
+  } catch (error) {
+    if (error instanceof AppError) throw error
+    console.error('[email] Password reset delivery failed:', error.message || error)
+    throw new AppError(describeSmtpError(error), 502, 'EMAIL_DELIVERY_FAILED')
+  }
+}
+
 /** Lightweight connectivity check for ops / startup diagnostics */
 export async function verifySmtpConnection() {
   const status = getSmtpConfigStatus()

@@ -3,7 +3,11 @@ import { authenticate } from '../middleware/auth.js'
 import {
   getAcademicAdminDashboard,
   getDepartmentDashboard,
+  getDirectorCourseStudents,
   getDirectorDashboard,
+  getDirectorDepartmentFaculty,
+  getDirectorDepartments,
+  getDirectorFacultyCourses,
   getFacultyDashboard,
   getFacultyMember,
   getFacultyOverview,
@@ -33,6 +37,34 @@ router.get(
   '/director',
   asyncHandler(async (req, res) => {
     sendSuccess(res, getDirectorDashboard(req.user))
+  }),
+)
+
+router.get(
+  '/director/departments',
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, getDirectorDepartments(req.user))
+  }),
+)
+
+router.get(
+  '/director/departments/:department/faculty',
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, getDirectorDepartmentFaculty(req.user, req.params.department))
+  }),
+)
+
+router.get(
+  '/director/faculty/:id/courses',
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, getDirectorFacultyCourses(req.user, req.params.id))
+  }),
+)
+
+router.get(
+  '/director/faculty/:id/students',
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, getDirectorCourseStudents(req.user, req.params.id, req.query.course))
   }),
 )
 

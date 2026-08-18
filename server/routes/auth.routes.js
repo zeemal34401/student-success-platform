@@ -1,8 +1,18 @@
 import { Router } from 'express'
-import { getDemoAccounts, login, logout, verifyToken, getInviteByToken, acceptInvite } from '../services/auth.service.js'
+import {
+  getDemoAccounts,
+  login,
+  logout,
+  verifyToken,
+  getInviteByToken,
+  acceptInvite,
+  requestPasswordReset,
+  getPasswordResetByToken,
+  resetPassword,
+} from '../services/auth.service.js'
 import { asyncHandler, sendSuccess, AppError } from '../utils/response.js'
 import { authenticate } from '../middleware/auth.js'
-import { loginRateLimiter } from '../middleware/rateLimit.js'
+import { loginRateLimiter, passwordResetRateLimiter } from '../middleware/rateLimit.js'
 import { env } from '../config/env.js'
 
 const router = Router()
@@ -34,6 +44,36 @@ router.post(
       throw new AppError('Passwords do not match', 400, 'PASSWORD_MISMATCH')
     }
     const result = acceptInvite(token, password)
+    sendSuccess(res, result)
+  }),
+)
+
+router.post(
+  '/forgot-password',
+  passwordResetRateLimiter,
+  asyncHandler(async (req, res) => {
+    const result = await requestPasswordReset(req.body?.email)
+    sendSuccess(res, result)
+  }),
+)
+
+router.get(
+  '/reset/:token',
+  asyncHandler(async (req, res) => {
+    const preview = getPasswordResetByToken(req.params.token)
+    sendSuccess(res, preview)
+  }),
+)
+
+router.post(
+  '/reset-password',
+  passwordResetRateLimiter,
+  asyncHandler(async (req, res) => {
+    const { token, password, confirmPassword } = req.body ?? {}
+    if (password !== confirmPassword) {
+      throw new AppError('Passwords do not match', 400, 'PASSWORD_MISMATCH')
+    }
+    const result = resetPassword(token, password)
     sendSuccess(res, result)
   }),
 )

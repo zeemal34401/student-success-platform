@@ -1,13 +1,15 @@
 import { env } from '../config/env.js'
+import { listStudents, ROLES } from './students.service.js'
 
 const TIMEOUT_MS = env.ml.fetchTimeoutMs
 
 async function fetchWithTimeout(url, options = {}) {
+  const { timeoutMs = TIMEOUT_MS, ...fetchOptions } = options
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const res = await fetch(url, { ...options, signal: controller.signal })
+    const res = await fetch(url, { ...fetchOptions, signal: controller.signal })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       throw new Error(`ML API ${res.status}${body ? `: ${body.slice(0, 120)}` : ''}`)
@@ -15,7 +17,7 @@ async function fetchWithTimeout(url, options = {}) {
     return res.json()
   } catch (error) {
     if (error.name === 'AbortError') {
-      throw new Error(`ML API timeout after ${TIMEOUT_MS}ms`)
+      throw new Error(`ML API timeout after ${timeoutMs}ms`)
     }
     throw error
   } finally {
@@ -240,8 +242,64 @@ export function getRealSkillDiagnostic(student) {
   }
 }
 
+const CLUSTER_LABELS = {
+  0: 'Disengaged / High Withdrawal Risk',
+  1: 'High Achiever',
+  2: 'Moderate Engagement / Mixed Outcome',
+  3: 'Repeat Attempter / Struggling',
+}
+
+const CLUSTER_OUTCOMES = {
+  0: { Distinction: 0.0, Fail: 21.27, Pass: 0.11, Withdrawn: 78.62 },
+  1: { Distinction: 24.1, Fail: 6.72, Pass: 67.55, Withdrawn: 1.63 },
+  2: { Distinction: 9.3, Fail: 24.46, Pass: 45.76, Withdrawn: 20.47 },
+  3: { Distinction: 3.41, Fail: 35.93, Pass: 31.54, Withdrawn: 29.12 },
+}
+
+function assignBehavioralCluster(student) {
+  const late = student.lateAssignments ?? 0
+  const gpa = student.gpa ?? 0
+  const attendance = student.attendance ?? 0
+  const lms = student.lmsActivity ?? 0
+
+  if (late >= 5) return 3
+  if (gpa >= 3.3 && attendance >= 85 && lms >= 70) return 1
+  if (attendance < 70 || lms < 40 || gpa < 2.2) return 0
+  return 2
+}
+
+function getLocalClusterSummary() {
+  const students = listStudents({ role: ROLES.DIRECTOR })
+  const counts = { 0: 0, 1: 0, 2: 0, 3: 0 }
+
+  students.forEach((student) => {
+    counts[assignBehavioralCluster(student)] += 1
+  })
+
+  const total = students.length || 1
+
+  return {
+    source: 'platform',
+    total_students: students.length,
+    clusters: [0, 1, 2, 3].map((clusterId) => ({
+      cluster_id: clusterId,
+      label: CLUSTER_LABELS[clusterId],
+      student_count: counts[clusterId],
+      percentage: Number(((counts[clusterId] / total) * 100).toFixed(1)),
+      outcome_distribution: CLUSTER_OUTCOMES[clusterId],
+    })),
+  }
+}
+
 export async function getClusterSummary() {
-  return fetchWithTimeout(`${env.ml.analytics}/cluster/summary`)
+  try {
+    const summary = await fetchWithTimeout(`${env.ml.analytics}/cluster/summary`, {
+      timeoutMs: 2000,
+    })
+    return { source: 'ml', ...summary }
+  } catch {
+    return getLocalClusterSummary()
+  }
 }
 
 export async function checkMlServicesHealth() {

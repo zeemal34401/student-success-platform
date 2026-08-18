@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -16,6 +16,7 @@ import {
   Loader,
   Lock,
   Mail,
+  ExternalLink,
   Shield,
   Users,
 } from 'lucide-react'
@@ -26,14 +27,14 @@ const STEPS = {
   WELCOME: 'welcome',
   ROLES: 'roles',
   SIGNIN: 'signin',
+  FORGOT: 'forgot',
+  SENT: 'sent',
 }
 
 const ROLE_OPTIONS = [
   { value: 'Director / Dean', label: 'Director / Dean', icon: Landmark },
   { value: 'Academic Admin', label: 'Academic Admin', icon: Shield },
-  { value: 'Department Head', label: 'Department Head', icon: Building2 },
   { value: 'Faculty', label: 'Faculty', icon: GraduationCap },
-  { value: 'Administrative Staff', label: 'Administrative Staff', icon: Users },
 ]
 
 const BRAND = {
@@ -111,7 +112,7 @@ function RoleCard({ role, onSelect }) {
     <button
       type="button"
       onClick={() => onSelect(role.value)}
-      className="prognos-role-card login-focus group flex w-full flex-col items-center rounded-2xl bg-white px-4 py-8 text-center"
+      className="prognos-role-card login-focus group flex w-[220px] flex-col items-center rounded-2xl bg-white/15 px-4 py-8 text-center backdrop-blur-md border border-white/25 shadow-sm"
       style={{ minHeight: 200 }}
     >
       <span
@@ -122,14 +123,14 @@ function RoleCard({ role, onSelect }) {
       </span>
       <span
         className="prognos-serif mt-5 text-lg font-semibold leading-snug"
-        style={{ color: BRAND.primaryDeep }}
+        style={{ color: '#F8FAFC' }}
       >
         {role.label}
       </span>
       <ChevronRight
         size={18}
         className="mt-4 opacity-0 transition-opacity group-hover:opacity-100"
-        style={{ color: BRAND.primary }}
+        style={{ color: '#ffffff' }}
         aria-hidden="true"
       />
     </button>
@@ -138,7 +139,7 @@ function RoleCard({ role, onSelect }) {
 
 function RoleSelectScreen({ onBack, onSelectRole }) {
   return (
-    <div className="login-rise w-full max-w-5xl">
+    <div className="login-rise mx-auto flex w-full max-w-5xl flex-col items-center">
       <div className="mb-10 flex flex-col items-center text-center">
         <GraduationCap size={36} className="text-white/90" strokeWidth={1.75} aria-hidden="true" />
         <h2
@@ -153,7 +154,7 @@ function RoleSelectScreen({ onBack, onSelectRole }) {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="mt-4 flex flex-wrap justify-center gap-4">
         {ROLE_OPTIONS.map((role) => (
           <RoleCard key={role.value} role={role} onSelect={onSelectRole} />
         ))}
@@ -285,6 +286,7 @@ function SignInScreen({
   email,
   password,
   error,
+  notice,
   submitting,
   showPassword,
   demoAccounts,
@@ -295,6 +297,7 @@ function SignInScreen({
   onSubmit,
   onBack,
   onChangeRole,
+  onForgotPassword,
 }) {
   const roleLabel = ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role
 
@@ -331,6 +334,15 @@ function SignInScreen({
         </div>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate aria-busy={submitting}>
+          {notice && (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800"
+            >
+              <Check size={18} className="shrink-0" aria-hidden="true" />
+              <span>{notice}</span>
+            </div>
+          )}
           {error && (
             <div
               id="login-error"
@@ -401,7 +413,7 @@ function SignInScreen({
                 type="button"
                 className="login-focus text-xs font-semibold hover:underline"
                 style={{ color: BRAND.primary }}
-                onClick={(e) => e.preventDefault()}
+                onClick={onForgotPassword}
               >
                 Forgot password?
               </button>
@@ -426,22 +438,26 @@ function SignInScreen({
             )}
           </button>
 
-          <div className="flex items-center gap-3 py-1">
-            <span className="h-px flex-1 bg-slate-200" />
-            <span className="text-xs text-slate-400">or</span>
-            <span className="h-px flex-1 bg-slate-200" />
-          </div>
+          {role !== 'Director / Dean' && (
+            <div className="flex items-center gap-3 py-1">
+              <span className="h-px flex-1 bg-slate-200" />
+              <span className="text-xs text-slate-400">or</span>
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+          )}
 
-          <p className="text-center text-xs text-slate-500">
-            Don&apos;t have an account?{' '}
-            <button
-              type="button"
-              className="login-focus font-semibold hover:underline"
-              style={{ color: BRAND.primary }}
-            >
-              Contact admin
-            </button>
-          </p>
+          {role !== 'Director / Dean' && (
+            <p className="text-center text-xs text-slate-500">
+              Don&apos;t have an account?{' '}
+              <button
+                type="button"
+                className="login-focus font-semibold hover:underline"
+                style={{ color: BRAND.primary }}
+              >
+                {role === 'Academic Admin' ? 'Contact director admin' : 'Contact admin'}
+              </button>
+            </p>
+          )}
         </form>
       </div>
 
@@ -461,7 +477,174 @@ function SignInScreen({
   )
 }
 
-export default function Login({ onLogin }) {
+function toAppResetUrl(apiResetUrl) {
+  if (!apiResetUrl) return ''
+  try {
+    const token = new URL(apiResetUrl, window.location.origin).searchParams.get('token')
+    if (!token) return ''
+    return `${window.location.origin}/reset-password?token=${encodeURIComponent(token)}`
+  } catch {
+    return ''
+  }
+}
+
+function maskEmail(email) {
+  const trimmed = String(email ?? '').trim()
+  const at = trimmed.indexOf('@')
+  if (at < 1) return trimmed
+  const local = trimmed.slice(0, at)
+  const domain = trimmed.slice(at + 1)
+  const visible = local.slice(0, 1)
+  return `${visible}***@${domain}`
+}
+
+function ForgotPasswordScreen({ email, error, submitting, onEmailChange, onSubmit, onBack }) {
+  return (
+    <div className="login-rise w-full max-w-[420px]">
+      <div className="prognos-signin-card">
+        <PrognosEmblem size={64} />
+        <h2
+          className="prognos-serif mt-5 text-center font-bold tracking-tight"
+          style={{ color: BRAND.primaryDeep, fontSize: '1.75rem' }}
+        >
+          Reset password
+        </h2>
+        <p className="mt-2 text-center text-sm leading-relaxed" style={{ color: BRAND.muted }}>
+          Enter the email for this account. If it matches a PrognosEd user, we will send a one-time reset link.
+        </p>
+
+        <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
+          {error && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700"
+            >
+              <AlertCircle size={18} className="shrink-0" aria-hidden="true" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="reset-email" className="sr-only">
+              Email
+            </label>
+            <div className="relative">
+              <Mail
+                size={18}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                aria-hidden="true"
+              />
+              <input
+                id="reset-email"
+                type="email"
+                autoComplete="email"
+                required
+                autoFocus
+                value={email}
+                onChange={onEmailChange}
+                placeholder="name@university.edu"
+                className="prognos-input w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="prognos-btn-gradient login-focus flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {submitting ? (
+              <>
+                <Loader size={18} className="animate-spin" aria-hidden="true" />
+                Sending link…
+              </>
+            ) : (
+              'Send reset link'
+            )}
+          </button>
+        </form>
+      </div>
+
+      <div className="mt-6 flex justify-center">
+        <button
+          type="button"
+          onClick={onBack}
+          className="login-focus inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white/80 hover:text-white"
+        >
+          <ArrowLeft size={16} aria-hidden="true" />
+          Back to sign in
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function CheckEmailScreen({ email, resetUrl, onBack, onResend, resending }) {
+  return (
+    <div className="login-rise w-full max-w-[440px]">
+      <div className="prognos-signin-card text-center">
+        <div
+          className="mx-auto flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-2xl"
+          style={{ background: BRAND.soft }}
+        >
+          <Mail size={28} style={{ color: BRAND.primary }} aria-hidden="true" />
+        </div>
+        <h2
+          className="prognos-serif mt-5 font-bold tracking-tight"
+          style={{ color: BRAND.primaryDeep, fontSize: '1.75rem' }}
+        >
+          Check your email
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed" style={{ color: BRAND.muted }}>
+          If an account exists for{' '}
+          <span className="font-semibold" style={{ color: BRAND.ink }}>
+            {maskEmail(email)}
+          </span>
+          , we sent a password reset link. It expires in 30 minutes and can be used once.
+        </p>
+        {resetUrl ? (
+          <a
+            href={resetUrl}
+            className="prognos-btn-gradient login-focus mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold text-white"
+          >
+            Open reset page
+            <ExternalLink size={16} aria-hidden="true" />
+          </a>
+        ) : (
+          <div
+            className="mt-5 rounded-xl px-4 py-3 text-left text-sm leading-relaxed"
+            style={{ background: BRAND.soft, color: BRAND.muted }}
+          >
+            Open the message from PrognosEd, then choose <strong style={{ color: BRAND.ink }}>Reset password</strong>.
+            If you do not see it, check spam or promotions.
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={onResend}
+          disabled={resending}
+          className="login-focus mt-5 text-sm font-semibold hover:underline disabled:opacity-60"
+          style={{ color: BRAND.primary }}
+        >
+          {resending ? 'Sending again…' : 'Resend link'}
+        </button>
+      </div>
+
+      <div className="mt-6 flex justify-center">
+        <button
+          type="button"
+          onClick={onBack}
+          className="login-focus inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white/80 hover:text-white"
+        >
+          <ArrowLeft size={16} aria-hidden="true" />
+          Return to sign in
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function Login({ onLogin, initialNotice }) {
   const [step, setStep] = useState(STEPS.WELCOME)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -470,6 +653,8 @@ export default function Login({ onLogin }) {
   const [submitting, setSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [demoAccounts, setDemoAccounts] = useState([])
+  const [notice, setNotice] = useState(initialNotice ?? '')
+  const [resetUrl, setResetUrl] = useState('')
 
   useEffect(() => {
     api.getDemoAccounts().then(setDemoAccounts).catch(() => setDemoAccounts([]))
@@ -478,7 +663,17 @@ export default function Login({ onLogin }) {
   function fillDemoAccount(account) {
     setEmail(account.email)
     setPassword(account.password)
-    setRole(account.role)
+    // Merge-role UI mapping:
+    // - Department Head -> Faculty
+    // - Administrative Staff -> Academic Admin
+    const mergedRole =
+      account.role === 'Department Head'
+        ? 'Faculty'
+        : account.role === 'Administrative Staff'
+          ? 'Academic Admin'
+          : account.role
+
+    setRole(mergedRole)
     setError('')
   }
 
@@ -486,6 +681,47 @@ export default function Login({ onLogin }) {
     setRole(selectedRole)
     setError('')
     setStep(STEPS.SIGNIN)
+  }
+
+  function openForgotPassword() {
+    setError('')
+    setPassword('')
+    setStep(STEPS.FORGOT)
+  }
+
+  async function handleForgotSubmit(event) {
+    event.preventDefault()
+    if (!email.trim() || !email.includes('@')) {
+      setError('Enter the email address for this account.')
+      return
+    }
+
+    setSubmitting(true)
+    setError('')
+
+    try {
+      const result = await api.requestPasswordReset(email.trim())
+      setResetUrl(toAppResetUrl(result.resetUrl))
+      setStep(STEPS.SENT)
+    } catch (err) {
+      setError(err.message ?? 'Unable to send a reset link. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleResendReset() {
+    setSubmitting(true)
+    setError('')
+    try {
+      const result = await api.requestPasswordReset(email.trim())
+      setResetUrl(toAppResetUrl(result.resetUrl))
+    } catch (err) {
+      setError(err.message ?? 'Unable to resend the reset link.')
+      setStep(STEPS.FORGOT)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function handleSubmit(event) {
@@ -536,6 +772,7 @@ export default function Login({ onLogin }) {
           email={email}
           password={password}
           error={error}
+          notice={notice}
           submitting={submitting}
           showPassword={showPassword}
           demoAccounts={demoAccounts}
@@ -546,6 +783,34 @@ export default function Login({ onLogin }) {
           onSubmit={handleSubmit}
           onBack={() => setStep(STEPS.ROLES)}
           onChangeRole={() => setStep(STEPS.ROLES)}
+          onForgotPassword={openForgotPassword}
+        />
+      )}
+
+      {step === STEPS.FORGOT && (
+        <ForgotPasswordScreen
+          email={email}
+          error={error}
+          submitting={submitting}
+          onEmailChange={(e) => setEmail(e.target.value)}
+          onSubmit={handleForgotSubmit}
+          onBack={() => {
+            setError('')
+            setStep(STEPS.SIGNIN)
+          }}
+        />
+      )}
+
+      {step === STEPS.SENT && (
+        <CheckEmailScreen
+          email={email}
+          resetUrl={resetUrl}
+          resending={submitting}
+          onResend={handleResendReset}
+          onBack={() => {
+            setError('')
+            setStep(STEPS.SIGNIN)
+          }}
         />
       )}
     </PrognosAuthBackdrop>

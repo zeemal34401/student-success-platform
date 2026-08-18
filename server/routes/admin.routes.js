@@ -11,12 +11,19 @@ import {
   updateAdminUser,
   ROLES,
 } from '../services/admin.service.js'
+import {
+  createStudent,
+  deleteStudent,
+  listManagedStudents,
+  toggleStudentStatus,
+  updateStudent,
+} from '../services/students.service.js'
 import { authenticate, requireRole } from '../middleware/auth.js'
 import { asyncHandler, sendSuccess } from '../utils/response.js'
 
 const router = Router()
 
-router.use(authenticate, requireRole(ROLES.ADMIN))
+router.use(authenticate, requireRole(ROLES.ADMIN, ROLES.DIRECTOR, ROLES.STAFF))
 
 router.get(
   '/users',
@@ -55,7 +62,7 @@ router.post(
 router.put(
   '/users/:id',
   asyncHandler(async (req, res) => {
-    const user = await updateAdminUser(req.params.id, req.body ?? {})
+    const user = await updateAdminUser(req.params.id, req.body ?? {}, req.user)
     sendSuccess(res, user)
   }),
 )
@@ -65,7 +72,12 @@ router.post(
   asyncHandler(async (req, res) => {
     const { assertDeliverableEmail } = await import('../services/email-validation.service.js')
     const result = await assertDeliverableEmail(req.body?.email)
-    sendSuccess(res, { valid: true, email: result.email, verifiedBy: result.verifiedBy })
+    sendSuccess(res, {
+      valid: true,
+      email: result.email,
+      verifiedBy: result.verifiedBy,
+      mailboxConfirmed: Boolean(result.mailboxConfirmed),
+    })
   }),
 )
 
@@ -80,7 +92,7 @@ router.post(
 router.patch(
   '/users/:id/status',
   asyncHandler(async (req, res) => {
-    const user = toggleAdminUserStatus(req.params.id)
+    const user = toggleAdminUserStatus(req.params.id, req.user)
     sendSuccess(res, user)
   }),
 )
@@ -88,7 +100,50 @@ router.patch(
 router.delete(
   '/users/:id',
   asyncHandler(async (req, res) => {
-    const result = deleteAdminUser(req.params.id)
+    const result = deleteAdminUser(req.params.id, req.user)
+    sendSuccess(res, result)
+  }),
+)
+
+router.get(
+  '/students',
+  asyncHandler(async (req, res) => {
+    const students = listManagedStudents({
+      search: req.query.search,
+      status: req.query.status,
+    })
+    sendSuccess(res, students, { total: students.length })
+  }),
+)
+
+router.post(
+  '/students',
+  asyncHandler(async (req, res) => {
+    const result = createStudent(req.body ?? {}, req.user)
+    sendSuccess(res, result, undefined, 201)
+  }),
+)
+
+router.put(
+  '/students/:id',
+  asyncHandler(async (req, res) => {
+    const student = updateStudent(req.params.id, req.body ?? {}, req.user)
+    sendSuccess(res, student)
+  }),
+)
+
+router.patch(
+  '/students/:id/status',
+  asyncHandler(async (req, res) => {
+    const student = toggleStudentStatus(req.params.id, req.user)
+    sendSuccess(res, student)
+  }),
+)
+
+router.delete(
+  '/students/:id',
+  asyncHandler(async (req, res) => {
+    const result = deleteStudent(req.params.id, req.user)
     sendSuccess(res, result)
   }),
 )
