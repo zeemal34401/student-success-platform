@@ -15,6 +15,10 @@ export function createApp() {
   const app = express()
 
   app.disable('x-powered-by')
+  // Required behind Vercel / reverse proxies for express-rate-limit.
+  if (env.isVercel || env.isProduction) {
+    app.set('trust proxy', 1)
+  }
   app.use(
     cors({
       // Reflect request origin when configured as '*' (required with credentials).

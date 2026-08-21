@@ -16,12 +16,23 @@ const defaultDatabasePath = isVercel
   ? path.join('/tmp', 'student_success.db')
   : path.join(rootDir, 'server', 'data', 'student_success.db')
 
+function resolveDatabasePath() {
+  const configured = process.env.DATABASE_PATH
+  if (isVercel) {
+    // Ignore local ./server/data paths that may leak from a build-time .env
+    if (!configured || !configured.startsWith('/tmp')) {
+      return path.join('/tmp', 'student_success.db')
+    }
+  }
+  return configured ?? defaultDatabasePath
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: Number(process.env.PORT ?? 3001),
   jwtSecret: process.env.JWT_SECRET ?? DEV_JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '24h',
-  databasePath: process.env.DATABASE_PATH ?? defaultDatabasePath,
+  databasePath: resolveDatabasePath(),
   corsOrigin: process.env.CORS_ORIGIN ?? (isVercel ? '*' : 'http://localhost:5173'),
   appBaseUrl:
     process.env.APP_BASE_URL ??

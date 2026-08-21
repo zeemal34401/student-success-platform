@@ -5,6 +5,7 @@ export const loginRateLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, forwardedHeader: false },
   message: {
     success: false,
     error: { message: 'Too many login attempts. Try again later.', code: 'RATE_LIMITED' },
@@ -16,6 +17,7 @@ export const passwordResetRateLimiter = rateLimit({
   max: 8,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, forwardedHeader: false },
   message: {
     success: false,
     error: { message: 'Too many reset requests. Try again later.', code: 'RATE_LIMITED' },
@@ -27,6 +29,7 @@ export const apiRateLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, forwardedHeader: false },
   message: {
     success: false,
     error: { message: 'Too many requests. Try again shortly.', code: 'RATE_LIMITED' },

@@ -28,3 +28,5 @@ ml/**/.venv/
 ml/**/__pycache__/
 ml/**/*.pyc
 ml/datasets/
+
+.vercel

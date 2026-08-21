@@ -12,6 +12,9 @@ const envPath = path.join(rootDir, '.env')
 const envExamplePath = path.join(rootDir, '.env.example')
 
 function ensureEnvFile() {
+  // Never write a local .env during Vercel builds — it overrides /tmp database paths.
+  if (process.env.VERCEL) return
+
   if (fs.existsSync(envPath)) return
 
   if (fs.existsSync(envExamplePath)) {
