@@ -69,11 +69,16 @@ router.get(
       if (result.status === 'fulfilled') {
         return { available: true, model, data: result.value, error: null }
       }
+      const raw = result.reason?.message ?? 'Prediction unavailable'
+      const error =
+        raw === 'fetch failed' || raw === 'Failed to fetch' || raw.includes('ECONNREFUSED')
+          ? 'Prediction service is offline; using platform metrics.'
+          : raw
       return {
         available: false,
         model,
         data: null,
-        error: result.reason?.message ?? 'Prediction unavailable',
+        error,
       }
     }
 

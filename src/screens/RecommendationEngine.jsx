@@ -5,7 +5,7 @@ import { api } from '../api/client'
 import { ROLES } from '../constants/roles'
 import { useAsyncData } from '../hooks/useAsyncData'
 
-function MlSkillRecommendations({ studentId }) {
+export function MlSkillRecommendations({ studentId }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)

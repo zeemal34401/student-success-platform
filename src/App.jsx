@@ -189,13 +189,16 @@ function AppShell({
   onSelectFaculty,
   onClearFacultyFilter,
   onClearDepartmentFilter,
+  facultyStudentsPrefill,
+  onOpenStudents,
+  onConsumeStudentsPrefill,
 }) {
   const displayName = user.name ?? deriveNameFromEmail(user.email)
   const navItems = useMemo(() => {
     const items = getNavItemsForRole(user.role).filter((item) => {
       if (item.id === 'faculty-overview') return user.role === ROLES.DEPARTMENT_HEAD
       if (item.id === 'admin') return user.role === ROLES.ADMIN || user.role === ROLES.STAFF
-      if (item.id === 'my-students' || item.id === 'recommendations')
+      if (item.id === 'my-students')
         return user.role === ROLES.FACULTY || user.role === ROLES.DEPARTMENT_HEAD
       return true
     })
@@ -224,14 +227,25 @@ function AppShell({
         if (user.role === ROLES.ADMIN || user.role === ROLES.STAFF) {
           return <AcademicAdminDashboard />
         }
-        return <FacultyDashboard user={user} onSelectStudent={onSelectStudent} onNavigate={onNavigate} />
+        return <FacultyDashboard user={user} onNavigate={onNavigate} onSelectStudent={onSelectStudent} onOpenStudents={onOpenStudents} />
       case 'my-students':
-        return <FacultyStudents user={user} onSelectStudent={onSelectStudent} />
+        return (
+          <FacultyStudents
+            user={user}
+            onNotify={onNotify}
+            initialCourse={facultyStudentsPrefill?.course ?? null}
+            initialRiskFilter={facultyStudentsPrefill?.riskFilter ?? 'All'}
+            onPrefillConsumed={onConsumeStudentsPrefill}
+          />
+        )
       case 'faculty-overview':
         return (
           <FacultyOverview user={user} onSelectFaculty={onSelectFaculty} />
         )
       case 'risk-alerts':
+        if (user.role === ROLES.FACULTY || user.role === ROLES.DEPARTMENT_HEAD) {
+          return <FacultyStudents user={user} onNotify={onNotify} />
+        }
         if (user.role === ROLES.DIRECTOR || user.role === ROLES.ADMIN || user.role === ROLES.STAFF) {
           return <DirectorRiskDrilldown onSelectStudent={onSelectStudent} />
         }
@@ -246,6 +260,9 @@ function AppShell({
           />
         )
       case 'recommendations':
+        if (user.role === ROLES.FACULTY || user.role === ROLES.DEPARTMENT_HEAD) {
+          return <FacultyStudents user={user} onNotify={onNotify} />
+        }
         return <RecommendationEngine user={user} onNotify={onNotify} />
       case 'reports':
         return <InstitutionalReports user={user} />
@@ -269,6 +286,9 @@ function AppShell({
           <StudentDetail
             studentId={selectedStudentId}
             onBack={onBackFromDetail}
+            includeRecommendations={user.role === ROLES.FACULTY || user.role === ROLES.DEPARTMENT_HEAD}
+            facultyMode={user.role === ROLES.FACULTY || user.role === ROLES.DEPARTMENT_HEAD}
+            onNotify={onNotify}
           />
         )
       default:
@@ -280,7 +300,7 @@ function AppShell({
         if (user.role === ROLES.ADMIN || user.role === ROLES.STAFF) {
           return <AcademicAdminDashboard />
         }
-        return <FacultyDashboard user={user} onSelectStudent={onSelectStudent} onNavigate={onNavigate} />
+        return <FacultyDashboard user={user} onNavigate={onNavigate} onSelectStudent={onSelectStudent} onOpenStudents={onOpenStudents} />
     }
   }
 
@@ -420,6 +440,7 @@ function App() {
     return link.kind === 'reset' ? link.token : null
   })
   const [loginNotice, setLoginNotice] = useState('')
+  const [facultyStudentsPrefill, setFacultyStudentsPrefill] = useState(null)
 
   useEffect(() => {
     const link = readAuthLink()
@@ -567,6 +588,15 @@ function App() {
     setSelectedDepartment(null)
   }
 
+  function handleOpenStudents(prefill = {}) {
+    setFacultyStudentsPrefill(prefill)
+    navigateWithLoading('my-students', false)
+  }
+
+  function handleConsumeStudentsPrefill() {
+    setFacultyStudentsPrefill(null)
+  }
+
   function handleNavigate(nextView) {
     navigateWithLoading(nextView)
   }
@@ -712,6 +742,9 @@ function App() {
         onSelectFaculty={handleSelectFaculty}
         onClearFacultyFilter={handleClearFacultyFilter}
         onClearDepartmentFilter={handleClearDepartmentFilter}
+        facultyStudentsPrefill={facultyStudentsPrefill}
+        onOpenStudents={handleOpenStudents}
+        onConsumeStudentsPrefill={handleConsumeStudentsPrefill}
       />
       <Toast toast={toast} onDismiss={dismissToast} />
     </>

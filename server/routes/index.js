@@ -7,6 +7,7 @@ import recommendationsRoutes from './recommendations.routes.js'
 import adminRoutes from './admin.routes.js'
 import searchRoutes from './search.routes.js'
 import settingsRoutes from './settings.routes.js'
+import ragRoutes from './rag.routes.js'
 import { asyncHandler, sendSuccess } from '../utils/response.js'
 import { checkMlServicesHealth } from '../services/mlPrediction.service.js'
 import { getSmtpConfigStatus, verifySmtpConnection } from '../services/email.service.js'
@@ -51,5 +52,6 @@ router.use('/recommendations', recommendationsRoutes)
 router.use('/admin', adminRoutes)
 router.use('/search', searchRoutes)
 router.use('/settings', settingsRoutes)
+router.use('/rag', ragRoutes)
 
 export default router

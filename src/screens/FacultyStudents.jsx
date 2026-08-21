@@ -1,338 +1,764 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+
+import { AlertTriangle, ArrowDownUp, ArrowRight, BookOpen, Search, Users } from 'lucide-react'
+
 import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  BookOpen,
-  Search,
-  SearchX,
-  Users,
-} from 'lucide-react'
-import {
+
   Card,
+
   PageLayout,
+
   RiskBadge,
+
   RiskScoreIndicator,
-  SectionHeader,
+
   ErrorState,
+
 } from '../components/ui'
+
+import {
+
+  FacultyBreadcrumb,
+
+  FacultyCourseCard,
+
+  FacultyMetricBar,
+
+} from '../components/faculty'
+
 import { api } from '../api/client'
+
 import { useAsyncData } from '../hooks/useAsyncData'
+
+import StudentDetail from './StudentDetail'
+
+
+
+function studentCourses(student) {
+
+  if (Array.isArray(student?.courses) && student.courses.length) return student.courses
+
+  return student?.course ? [student.course] : []
+
+}
+
+
+
+function studentInCourse(student, courseName) {
+
+  return studentCourses(student).includes(courseName)
+
+}
+
+
 
 const RISK_FILTERS = ['All', 'Critical', 'High', 'Medium', 'Low']
 
-const COLUMNS = [
-  { key: 'name', label: 'Student', sortable: true },
-  { key: 'course', label: 'Course', sortable: true },
-  { key: 'attendance', label: 'Attendance', sortable: true, align: 'right' },
-  { key: 'gpa', label: 'GPA', sortable: true, align: 'right' },
-  { key: 'lmsActivity', label: 'LMS Activity', sortable: true, align: 'right' },
-  { key: 'lateAssignments', label: 'Late', sortable: true, align: 'right' },
-  { key: 'riskScore', label: 'Risk Score', sortable: true, align: 'right' },
-  { key: 'riskLevel', label: 'Risk Level', sortable: true },
+const SORT_OPTIONS = [
+
+  { id: 'risk', label: 'Risk score' },
+
+  { id: 'name', label: 'Name' },
+
+  { id: 'attendance', label: 'Attendance' },
+
+  { id: 'gpa', label: 'GPA' },
+
 ]
 
-function SortIcon({ column, sortField, sortDirection }) {
-  if (column !== sortField) {
-    return <ArrowUpDown size={14} className="text-text-muted" aria-hidden="true" />
+
+
+function sortStudents(rows, sortBy) {
+
+  const next = [...rows]
+
+  switch (sortBy) {
+
+    case 'name':
+
+      return next.sort((a, b) => a.name.localeCompare(b.name))
+
+    case 'attendance':
+
+      return next.sort((a, b) => a.attendance - b.attendance)
+
+    case 'gpa':
+
+      return next.sort((a, b) => a.gpa - b.gpa)
+
+    default:
+
+      return next.sort((a, b) => b.riskScore - a.riskScore)
+
   }
-  return sortDirection === 'asc' ? (
-    <ArrowUp size={14} className="text-primary-600" aria-hidden="true" />
-  ) : (
-    <ArrowDown size={14} className="text-primary-600" aria-hidden="true" />
-  )
+
 }
 
-function compareValues(a, b, key) {
-  const aVal = a[key]
-  const bVal = b[key]
-  if (typeof aVal === 'number' && typeof bVal === 'number') return aVal - bVal
-  return String(aVal ?? '').localeCompare(String(bVal ?? ''))
-}
 
-export default function FacultyStudents({ user, onSelectStudent }) {
+
+export default function FacultyStudents({
+
+  user,
+
+  onNotify,
+
+  initialCourse = null,
+
+  initialRiskFilter = 'All',
+
+  onPrefillConsumed,
+
+}) {
+
+  const [selectedCourse, setSelectedCourse] = useState(initialCourse)
+
+  const [selectedStudentId, setSelectedStudentId] = useState(null)
+
   const [search, setSearch] = useState('')
-  const [riskFilter, setRiskFilter] = useState('All')
-  const [courseFilter, setCourseFilter] = useState('All')
-  const [sortField, setSortField] = useState('name')
-  const [sortDirection, setSortDirection] = useState('asc')
+
+  const [riskFilter, setRiskFilter] = useState(initialRiskFilter)
+
+  const [sortBy, setSortBy] = useState('risk')
+
+  const appliedPrefill = useRef(null)
+
+  useEffect(() => {
+    const key = `${initialCourse ?? ''}:${initialRiskFilter ?? 'All'}`
+    if (key === ':All' || appliedPrefill.current === key) return
+    appliedPrefill.current = key
+    if (initialCourse) setSelectedCourse(initialCourse)
+    if (initialRiskFilter) setRiskFilter(initialRiskFilter)
+    onPrefillConsumed?.()
+  }, [initialCourse, initialRiskFilter, onPrefillConsumed])
 
   const { data: students, loading, error, refetch } = useAsyncData(
+
     () => api.getStudents({ sortField: 'name', sortDirection: 'asc' }),
+
     [],
+
   )
+
+
 
   const roster = students ?? []
+
   const assignedCourses = user?.courses?.length
+
     ? user.courses
-    : [...new Set(roster.map((s) => s.course))].sort()
 
-  const courseOptions = useMemo(() => {
-    const fromRoster = [...new Set(roster.map((s) => s.course))]
-    const merged = [...new Set([...(assignedCourses ?? []), ...fromRoster])]
-    return merged.sort()
-  }, [roster, assignedCourses])
+    : [...new Set(roster.flatMap((s) => studentCourses(s)))].sort()
 
-  const filtered = useMemo(() => {
-    let rows = [...roster]
 
-    if (courseFilter !== 'All') {
-      rows = rows.filter((s) => s.course === courseFilter)
-    }
-    if (riskFilter !== 'All') {
-      rows = rows.filter((s) => s.riskLevel === riskFilter)
-    }
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      rows = rows.filter(
-        (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.id.toLowerCase().includes(q) ||
-          s.course.toLowerCase().includes(q),
-      )
-    }
 
-    rows.sort((a, b) => {
-      const cmp = compareValues(a, b, sortField)
-      return sortDirection === 'asc' ? cmp : -cmp
+  const courseRows = useMemo(() => {
+
+    return assignedCourses.map((course) => {
+
+      const members = roster.filter((s) => studentInCourse(s, course))
+
+      const atRiskCount = members.filter((s) => s.riskLevel === 'Critical' || s.riskLevel === 'High').length
+
+      const criticalCount = members.filter((s) => s.riskLevel === 'Critical').length
+
+      return {
+
+        course,
+
+        enrolled: members.length,
+
+        atRiskCount,
+
+        criticalCount,
+
+        students: [...members].sort((a, b) => b.riskScore - a.riskScore),
+
+      }
+
     })
 
-    return rows
-  }, [roster, courseFilter, riskFilter, search, sortField, sortDirection])
+  }, [assignedCourses, roster])
 
-  function handleSort(key) {
-    if (sortField === key) {
-      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
-      return
+
+
+  const activeCourse = courseRows.find((row) => row.course === selectedCourse) ?? null
+
+  const courseStudents = useMemo(() => {
+
+    let rows = activeCourse?.students ?? []
+
+    if (riskFilter !== 'All') {
+
+      rows = rows.filter((s) => s.riskLevel === riskFilter)
+
     }
-    setSortField(key)
-    setSortDirection(key === 'name' || key === 'course' || key === 'riskLevel' ? 'asc' : 'desc')
-  }
 
-  function clearFilters() {
+    if (search.trim()) {
+
+      const q = search.trim().toLowerCase()
+
+      rows = rows.filter((s) => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q))
+
+    }
+
+    return sortStudents(rows, sortBy)
+
+  }, [activeCourse, riskFilter, search, sortBy])
+
+
+
+  const totalAtRisk = courseRows.reduce((sum, row) => sum + row.atRiskCount, 0)
+
+
+
+  function openCourse(course) {
+
+    setSelectedCourse(course)
+
+    setSelectedStudentId(null)
+
     setSearch('')
+
     setRiskFilter('All')
-    setCourseFilter('All')
+
+    setSortBy('risk')
+
   }
 
-  const hasFilters = search.trim() !== '' || riskFilter !== 'All' || courseFilter !== 'All'
+
+
+  function backToCourses() {
+
+    setSelectedCourse(null)
+
+    setSelectedStudentId(null)
+
+    setSearch('')
+
+    setRiskFilter('All')
+
+  }
+
+
+
+  function backToRoster() {
+
+    setSelectedStudentId(null)
+
+  }
+
+
 
   if (error) {
+
     return (
+
       <PageLayout size="wide">
+
         <ErrorState error={error} onRetry={refetch} />
+
       </PageLayout>
+
     )
+
   }
 
-  return (
-    <PageLayout size="wide">
-      <SectionHeader
-        as="h2"
-        title="My Students"
-        description={`Complete roster of students under your supervision${user?.name ? ` (${user.name})` : ''}.`}
+
+
+  if (selectedStudentId) {
+
+    return (
+
+      <StudentDetail
+
+        studentId={selectedStudentId}
+
+        onBack={backToRoster}
+
+        includeRecommendations
+
+        onNotify={onNotify}
+
+        facultyMode
+
       />
 
-      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-text-secondary">
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5">
-          <Users size={14} className="text-primary-600" aria-hidden="true" />
-          <span className="font-medium text-text-primary">{roster.length}</span> enrolled
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5">
-          <BookOpen size={14} className="text-primary-600" aria-hidden="true" />
-          <span className="font-medium text-text-primary">{courseOptions.length}</span> section
-          {courseOptions.length !== 1 ? 's' : ''}
-        </span>
-      </div>
+    )
 
-      <Card className="mt-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="relative min-w-0 flex-1 max-w-md">
-            <label htmlFor="faculty-student-search" className="sr-only">
-              Search your students
-            </label>
-            <Search
-              size={16}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-              aria-hidden="true"
-            />
-            <input
-              id="faculty-student-search"
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, ID, or course"
-              className="input-field w-full pl-9"
-            />
+  }
+
+
+
+  if (selectedCourse) {
+
+    return (
+
+      <PageLayout size="wide">
+
+        <FacultyBreadcrumb
+
+          items={[
+
+            { label: 'My Students', onClick: backToCourses },
+
+            { label: selectedCourse },
+
+          ]}
+
+        />
+
+
+
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+
+          <div>
+
+            <h2 className="font-heading text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">
+
+              {selectedCourse}
+
+            </h2>
+
+            <p className="mt-1 text-sm text-text-secondary">
+
+              {activeCourse?.enrolled ?? 0} enrolled · {activeCourse?.atRiskCount ?? 0} at risk · open a student for risk details and personalized advising.
+
+            </p>
+
           </div>
 
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.03em] text-text-muted">
-                Course
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCourseFilter('All')}
-                  aria-pressed={courseFilter === 'All'}
-                  className={['filter-pill', courseFilter === 'All' ? 'filter-pill-active' : 'filter-pill-inactive'].join(' ')}
-                >
-                  All
-                </button>
-                {courseOptions.map((course) => (
-                  <button
-                    key={course}
-                    type="button"
-                    onClick={() => setCourseFilter(course)}
-                    aria-pressed={courseFilter === course}
-                    className={['filter-pill', courseFilter === course ? 'filter-pill-active' : 'filter-pill-inactive'].join(' ')}
-                  >
-                    {course.split(' ')[0]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.03em] text-text-muted">
-                Risk
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {RISK_FILTERS.map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    onClick={() => setRiskFilter(level)}
-                    aria-pressed={riskFilter === level}
-                    className={['filter-pill', riskFilter === level ? 'filter-pill-active' : 'filter-pill-inactive'].join(' ')}
-                  >
-                    {level}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
         </div>
 
-        {loading ? (
-          <div className="mt-6 space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="animate-skeleton h-12 w-full rounded-md bg-border/80" />
-            ))}
-          </div>
-        ) : roster.length === 0 ? (
-          <div className="mt-8 flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-background px-6 py-16 text-center">
-            <Users size={22} className="text-primary-600" aria-hidden="true" />
-            <h3 className="mt-4 text-sm font-semibold text-text-primary">
-              No students assigned to your sections
-            </h3>
-            <p className="mt-1 max-w-md text-sm text-text-secondary">
-              {assignedCourses?.length
-                ? `Your courses (${assignedCourses.join(', ')}) currently have no enrolled students.`
-                : 'Ask an Academic Admin to assign you to one or more courses.'}
-            </p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="mt-8 flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-background px-6 py-16 text-center">
-            <SearchX size={22} className="text-primary-600" aria-hidden="true" />
-            <h3 className="mt-4 text-sm font-semibold text-text-primary">No students match your filters</h3>
-            {hasFilters && (
-              <button type="button" onClick={clearFilters} className="btn-primary mt-4">
-                Clear filters
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="mt-6 -mx-5 min-w-0 overflow-x-auto px-5 sm:mx-0 sm:px-0">
-            <table
-              className="w-full min-w-[900px] border-collapse text-left text-sm"
-              aria-label="Students under your supervision"
-            >
-              <caption className="sr-only">
-                All students enrolled in courses taught by {user?.name ?? 'this faculty member'}
-              </caption>
-              <thead>
-                <tr className="border-b border-border bg-[#F9FAFB]">
-                  {COLUMNS.map((col) => (
-                    <th
-                      key={col.key}
-                      scope="col"
-                      className={[
-                        'whitespace-nowrap px-3 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary',
-                        col.align === 'right' ? 'text-right' : 'text-left',
-                      ].join(' ')}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleSort(col.key)}
-                        className={[
-                          'inline-flex items-center gap-1 rounded-sm transition-all duration-150 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600',
-                          col.align === 'right' ? 'ml-auto' : '',
-                        ].join(' ')}
-                      >
-                        {col.label}
-                        <SortIcon column={col.key} sortField={sortField} sortDirection={sortDirection} />
-                      </button>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((student, index) => (
-                  <tr
-                    key={student.id}
-                    onClick={() => onSelectStudent?.(student.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        onSelectStudent?.(student.id)
-                      }
-                    }}
-                    tabIndex={0}
-                    aria-label={`View details for ${student.name}`}
-                    className={[
-                      'cursor-pointer border-b border-border transition-all duration-150 last:border-b-0',
-                      'hover:bg-[#F9FAFB] focus-visible:bg-[#F9FAFB]',
-                      'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-600',
-                      index % 2 === 1 ? 'bg-background/70' : 'bg-surface',
-                    ].join(' ')}
-                  >
-                    <td className="px-3 py-3">
-                      <p className="font-medium text-text-primary">{student.name}</p>
-                      <p className="text-xs text-text-muted">{student.id}</p>
-                    </td>
-                    <td className="px-3 py-3 text-text-secondary">{student.course}</td>
-                    <td className="px-3 py-3 text-right tabular-nums text-text-primary">
-                      {student.attendance}%
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-text-primary">
-                      {student.gpa.toFixed(2)}
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-text-primary">
-                      {student.lmsActivity}%
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-text-primary">
-                      {student.lateAssignments}
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <RiskScoreIndicator score={student.riskScore} level={student.riskLevel} />
-                    </td>
-                    <td className="px-3 py-3">
-                      <RiskBadge level={student.riskLevel} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
 
-            <p className="mt-4 text-xs text-text-muted">
-              Showing {filtered.length} of {roster.length} student
-              {roster.length !== 1 ? 's' : ''} under your supervision
-            </p>
+
+        <div className="faculty-filter-bar mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+
+          <div className="relative min-w-0 flex-1 max-w-md">
+
+            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+
+            <input
+
+              type="search"
+
+              value={search}
+
+              onChange={(e) => setSearch(e.target.value)}
+
+              placeholder="Search by name or student ID"
+
+              className="input-field w-full pl-9"
+
+            />
+
           </div>
+
+
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+
+            <div>
+
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.03em] text-text-muted">Sort by</p>
+
+              <div className="relative">
+
+                <ArrowDownUp size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+
+                <select
+
+                  value={sortBy}
+
+                  onChange={(e) => setSortBy(e.target.value)}
+
+                  className="input-field min-w-[10rem] appearance-none pl-9 pr-8"
+
+                  aria-label="Sort students"
+
+                >
+
+                  {SORT_OPTIONS.map((option) => (
+
+                    <option key={option.id} value={option.id}>{option.label}</option>
+
+                  ))}
+
+                </select>
+
+              </div>
+
+            </div>
+
+
+
+            <div>
+
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.03em] text-text-muted">Risk level</p>
+
+              <div className="flex flex-wrap gap-2">
+
+                {RISK_FILTERS.map((level) => (
+
+                  <button
+
+                    key={level}
+
+                    type="button"
+
+                    onClick={() => setRiskFilter(level)}
+
+                    aria-pressed={riskFilter === level}
+
+                    className={['filter-pill', riskFilter === level ? 'filter-pill-active' : 'filter-pill-inactive'].join(' ')}
+
+                  >
+
+                    {level}
+
+                  </button>
+
+                ))}
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+
+        {loading ? (
+
+          <div className="mt-6 space-y-3">
+
+            {Array.from({ length: 4 }).map((_, i) => (
+
+              <div key={i} className="animate-skeleton h-16 w-full rounded-xl bg-border/80" />
+
+            ))}
+
+          </div>
+
+        ) : courseStudents.length === 0 ? (
+
+          <Card className="mt-6 text-center">
+
+            <div className="flex flex-col items-center py-12">
+
+              <Users size={22} className="text-primary-600" aria-hidden="true" />
+
+              <h3 className="mt-4 text-sm font-semibold text-text-primary">
+
+                {activeCourse?.enrolled ? 'No students match these filters' : 'No students enrolled in this course'}
+
+              </h3>
+
+              <p className="mt-1 max-w-md text-sm text-text-secondary">
+
+                Try clearing the risk filter or search term to see the full roster.
+
+              </p>
+
+            </div>
+
+          </Card>
+
+        ) : (
+
+          <Card className="mt-6" padding={false}>
+
+            <div className="overflow-x-auto">
+
+              <table className="w-full min-w-[980px] border-collapse text-left text-sm" aria-label={`Students in ${selectedCourse}`}>
+
+                <thead>
+
+                  <tr className="border-b border-border bg-[#F9FAFB]">
+
+                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Student</th>
+
+                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Attendance</th>
+
+                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">GPA</th>
+
+                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">LMS</th>
+
+                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Late</th>
+
+                    <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Risk</th>
+
+                    <th className="px-4 py-3"><span className="sr-only">Open</span></th>
+
+                  </tr>
+
+                </thead>
+
+                <tbody>
+
+                  {courseStudents.map((student) => (
+
+                    <tr
+
+                      key={student.id}
+
+                      className="faculty-table-row cursor-pointer border-b border-border last:border-b-0"
+
+                      onClick={() => setSelectedStudentId(student.id)}
+
+                    >
+
+                      <td className="px-4 py-4">
+
+                        <div>
+
+                          <p className="font-semibold text-primary-700">{student.name}</p>
+
+                          <p className="text-xs text-text-muted">{student.id}</p>
+
+                        </div>
+
+                      </td>
+
+                      <td className="px-4 py-4">
+
+                        <FacultyMetricBar value={student.attendance} label={`${student.attendance}%`} />
+
+                      </td>
+
+                      <td className="px-4 py-4">
+
+                        <FacultyMetricBar value={(student.gpa / 4) * 100} label={Number(student.gpa).toFixed(2)} />
+
+                      </td>
+
+                      <td className="px-4 py-4">
+
+                        <FacultyMetricBar value={student.lmsActivity} label={`${student.lmsActivity}%`} />
+
+                      </td>
+
+                      <td className="px-4 py-4">
+
+                        <FacultyMetricBar value={student.lateAssignments} max={10} invert label={`${student.lateAssignments}`} />
+
+                      </td>
+
+                      <td className="px-4 py-4">
+
+                        <div className="flex flex-wrap items-center gap-2">
+
+                          <RiskBadge level={student.riskLevel} />
+
+                          <RiskScoreIndicator score={student.riskScore} level={student.riskLevel} />
+
+                        </div>
+
+                      </td>
+
+                      <td className="px-4 py-4 text-right">
+
+                        <button
+
+                          type="button"
+
+                          onClick={(e) => {
+
+                            e.stopPropagation()
+
+                            setSelectedStudentId(student.id)
+
+                          }}
+
+                          className="btn-secondary"
+
+                        >
+
+                          Open profile
+
+                          <ArrowRight size={14} aria-hidden="true" />
+
+                        </button>
+
+                      </td>
+
+                    </tr>
+
+                  ))}
+
+                </tbody>
+
+              </table>
+
+            </div>
+
+          </Card>
+
         )}
-      </Card>
+
+      </PageLayout>
+
+    )
+
+  }
+
+
+
+  return (
+
+    <PageLayout size="wide">
+
+      <FacultyBreadcrumb items={[{ label: 'My Students' }]} />
+
+
+
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+
+        <div>
+
+          <h2 className="font-heading text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">
+
+            My Students
+
+          </h2>
+
+          <p className="mt-1 text-sm text-text-secondary">
+
+            {assignedCourses.length} section{assignedCourses.length !== 1 ? 's' : ''} assigned to {user?.name ?? 'you'}.
+
+            {totalAtRisk > 0 ? ` ${totalAtRisk} students need follow-up.` : ' All sections look stable.'}
+
+          </p>
+
+        </div>
+
+      </div>
+
+
+
+      {loading ? (
+
+        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+
+          {Array.from({ length: 3 }).map((_, i) => (
+
+            <div key={i} className="animate-skeleton h-44 rounded-2xl bg-border/80" />
+
+          ))}
+
+        </div>
+
+      ) : courseRows.length === 0 ? (
+
+        <Card className="mt-6 text-center">
+
+          <div className="flex flex-col items-center py-12">
+
+            <BookOpen size={22} className="text-primary-600" aria-hidden="true" />
+
+            <h3 className="mt-4 text-sm font-semibold text-text-primary">No courses assigned</h3>
+
+            <p className="mt-1 max-w-md text-sm text-text-secondary">
+
+              Ask an Academic Admin to assign you to one or more courses.
+
+            </p>
+
+          </div>
+
+        </Card>
+
+      ) : (
+
+        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+
+          {courseRows.map((row) => (
+
+            <FacultyCourseCard
+
+              key={row.course}
+
+              course={row.course}
+
+              enrolled={row.enrolled}
+
+              atRiskCount={row.atRiskCount}
+
+              criticalCount={row.criticalCount}
+
+              onOpen={openCourse}
+
+            />
+
+          ))}
+
+        </div>
+
+      )}
+
+
+
+      {totalAtRisk > 0 ? (
+
+        <Card className="mt-6 border-risk-high-border/60 bg-risk-high-bg/20">
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+            <div className="flex items-start gap-3">
+
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-risk-high ring-1 ring-risk-high-border/50">
+
+                <AlertTriangle size={18} aria-hidden="true" />
+
+              </div>
+
+              <div>
+
+                <h3 className="text-sm font-semibold text-text-primary">Priority follow-up recommended</h3>
+
+                <p className="mt-0.5 text-sm text-text-secondary">
+
+                  {totalAtRisk} student{totalAtRisk !== 1 ? 's' : ''} across your sections are flagged critical or high risk.
+
+                </p>
+
+              </div>
+
+            </div>
+
+            <button
+
+              type="button"
+
+              className="btn-primary shrink-0"
+
+              onClick={() => {
+
+                const urgent = courseRows.find((row) => row.criticalCount > 0) ?? courseRows[0]
+
+                if (urgent) openCourse(urgent.course)
+
+              }}
+
+            >
+
+              Review highest-risk section
+
+              <ArrowRight size={15} aria-hidden="true" />
+
+            </button>
+
+          </div>
+
+        </Card>
+
+      ) : null}
+
     </PageLayout>
+
   )
+
 }
+
+

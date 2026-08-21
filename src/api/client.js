@@ -74,6 +74,15 @@ export async function apiRequest(path, options = {}) {
     if (error.name === 'AbortError') {
       throw new ApiError('Request timed out. Please try again.', 408, 'TIMEOUT')
     }
+    if (error instanceof ApiError) throw error
+    const message = error.message ?? ''
+    if (message === 'Failed to fetch' || message === 'fetch failed' || error.name === 'TypeError') {
+      throw new ApiError(
+        'Unable to reach the server. Confirm the API is running and try again.',
+        503,
+        'NETWORK_ERROR',
+      )
+    }
     throw error
   } finally {
     clearTimeout(timer)
@@ -343,5 +352,16 @@ export const api = {
 
   getMlSkillRecommendations(id) {
     return apiRequest(`/recommendations/${id}/ml-skills`)
+  },
+
+  getRagChat(studentId) {
+    return apiRequest(`/rag/${encodeURIComponent(studentId)}`)
+  },
+
+  askRagChat(studentId, question) {
+    return apiRequest(`/rag/${encodeURIComponent(studentId)}`, {
+      method: 'POST',
+      body: JSON.stringify({ question }),
+    })
   },
 }

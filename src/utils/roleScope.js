@@ -4,8 +4,6 @@ export function getNavItemsForRole(role) {
   const faculty = [
     { id: 'dashboard', label: 'Faculty Dashboard', shortLabel: 'Dashboard' },
     { id: 'my-students', label: 'My Students', shortLabel: 'Students' },
-    { id: 'risk-alerts', label: 'Risk Alerts', shortLabel: 'Alerts' },
-    { id: 'recommendations', label: 'Recommendations', shortLabel: 'Plans' },
     { id: 'reports', label: 'Class Reports', shortLabel: 'Reports' },
     { id: 'settings', label: 'Settings', shortLabel: 'Settings' },
   ]

@@ -1,11 +1,14 @@
+import { useEffect } from 'react'
 import {
   ArrowLeft,
   BookOpen,
   CalendarCheck,
+  CheckCircle2,
   ClipboardList,
   Lightbulb,
   Monitor,
   UserX,
+  XCircle,
 } from 'lucide-react'
 import {
   CartesianGrid,
@@ -21,6 +24,8 @@ import { CHART_COLORS, getRiskChartColor, RISK_CHART_COLORS } from '../constants
 import { Card, PageLayout, RiskBadge, ErrorState } from '../components/ui'
 import { api } from '../api/client'
 import { useAsyncData } from '../hooks/useAsyncData'
+import { MlSkillRecommendations } from './RecommendationEngine'
+import StudentRagChat from '../components/StudentRagChat'
 
 const FACTOR_CONFIG = [
   { key: 'attendance', label: 'Attendance', icon: CalendarCheck, format: (v) => `${v}%`, barValue: (v) => v, barMax: 100, invert: false },
@@ -172,7 +177,110 @@ function MlPredictionsCard({ mlRisk, mlLoading, mlError, onRetry }) {
   )
 }
 
-export default function StudentDetail({ studentId, onBack }) {
+function StudentRecommendations({ student, onNotify }) {
+  const { data, loading, error, setData, refetch } = useAsyncData(() => api.getRecommendations(), [])
+  const item = data?.items?.find((row) => row.id === student.id)
+
+  async function handleDecision(decision) {
+    try {
+      const result = await api.saveRecommendationDecision(student.id, decision)
+      onNotify?.({ studentName: result.studentName, decision: result.decision })
+      setData((prev) => {
+        if (!prev) return prev
+        const items = prev.items.map((row) => (row.id === student.id ? { ...row, decision } : row))
+        return {
+          items,
+          summary: {
+            pendingCount: items.filter((s) => !s.decision).length,
+            acceptedCount: items.filter((s) => s.decision === 'accepted').length,
+            dismissedCount: items.filter((s) => s.decision === 'dismissed').length,
+          },
+        }
+      })
+    } catch (err) {
+      onNotify?.({ studentName: student.name, decision: 'error' })
+      console.error(err)
+    }
+  }
+
+  if (loading) {
+    return (
+      <Card className="mt-6">
+        <p className="text-sm text-text-muted">Loading personalized recommendations…</p>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="mt-6">
+        <h2 className="card-title">Personalized recommendations</h2>
+        <p className="mt-2 text-sm text-text-secondary">{error.message ?? 'Unable to load recommendations.'}</p>
+        <button type="button" onClick={refetch} className="btn-secondary mt-3">Retry</button>
+      </Card>
+    )
+  }
+
+  const actions = item?.interventions ?? student.interventions ?? []
+  const decision = item?.decision ?? null
+
+  return (
+    <Card className="mt-6">
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
+          <Lightbulb size={18} aria-hidden="true" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="card-title">Personalized recommendations</h2>
+          <p className="mt-0.5 text-sm text-text-secondary">
+            Intervention plan and RAG advisor for {student.name}
+            {student.riskLevel ? ` · ${student.riskLevel} risk` : ''}
+          </p>
+        </div>
+        {decision === 'accepted' && (
+          <div className="inline-flex items-center gap-2 rounded-md border border-risk-low-border bg-risk-low-bg px-3 py-1.5 text-sm font-medium text-risk-low">
+            <CheckCircle2 size={16} aria-hidden="true" /> Accepted
+          </div>
+        )}
+        {decision === 'dismissed' && (
+          <div className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium text-text-muted">
+            <XCircle size={16} aria-hidden="true" /> Dismissed
+          </div>
+        )}
+      </div>
+
+      <ul className="mt-5 space-y-3">
+        {actions.length === 0 ? (
+          <li className="text-sm text-text-muted">No template interventions for this risk level. Use the RAG advisor below for a personalized plan.</li>
+        ) : (
+          actions.map((action, index) => (
+            <li key={action} className="flex gap-3 rounded-md border border-border bg-background px-3 py-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-50 text-xs font-semibold text-primary-600">
+                {index + 1}
+              </span>
+              <span className="text-sm text-text-primary">{action}</span>
+            </li>
+          ))
+        )}
+      </ul>
+
+      <MlSkillRecommendations studentId={student.id} />
+
+      {!decision && student.riskLevel !== 'Low' && actions.length > 0 && (
+        <div className="mt-5 flex flex-col gap-2 border-t border-border pt-4 sm:flex-row">
+          <button type="button" onClick={() => handleDecision('accepted')} className="btn-primary">
+            <CheckCircle2 size={15} aria-hidden="true" /> Accept plan
+          </button>
+          <button type="button" onClick={() => handleDecision('dismissed')} className="btn-secondary">
+            <XCircle size={15} aria-hidden="true" /> Dismiss
+          </button>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+export default function StudentDetail({ studentId, onBack, includeRecommendations = false, onNotify, facultyMode = false }) {
   const { data: student, loading, error } = useAsyncData(
     () => (studentId ? api.getStudent(studentId) : Promise.resolve(null)),
     [studentId],
@@ -182,6 +290,12 @@ export default function StudentDetail({ studentId, onBack }) {
     () => (studentId ? api.getMlRisk(studentId) : Promise.resolve(null)),
     [studentId],
   )
+
+  useEffect(() => {
+    const main = document.querySelector('main')
+    if (main) main.scrollTo({ top: 0, behavior: 'auto' })
+    else window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [studentId])
 
   if (loading) {
     return (
@@ -221,12 +335,28 @@ export default function StudentDetail({ studentId, onBack }) {
 
   return (
     <PageLayout size="wide">
-      <button type="button" onClick={onBack} className="btn-ghost -ml-2"><ArrowLeft size={16} aria-hidden="true" /> Back</button>
+      <button type="button" onClick={onBack} className="btn-ghost -ml-2">
+        <ArrowLeft size={16} aria-hidden="true" /> Back
+      </button>
 
-      <div className="mt-2">
-        <h2 className="text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">{student.name}</h2>
-        <p className="mt-1 text-sm text-text-secondary">{student.id} · {student.course}</p>
-        <p className="text-sm text-text-muted">{student.department}</p>
+      <div className={facultyMode ? 'faculty-detail-header mt-4 p-5 sm:p-6' : 'mt-2'}>
+        <div className={facultyMode ? 'flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between' : ''}>
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">{student.name}</h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              {student.id} · {(student.courses?.length ? student.courses.join(', ') : student.course)}
+            </p>
+            <p className="text-sm text-text-muted">{student.department}</p>
+          </div>
+          {facultyMode ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <RiskBadge level={student.riskLevel} />
+              <span className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1 text-sm font-semibold tabular-nums text-text-primary">
+                Risk score {student.riskScore}/100
+              </span>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -246,7 +376,7 @@ export default function StudentDetail({ studentId, onBack }) {
 
       <MlPredictionsCard mlRisk={mlRisk} mlLoading={mlLoading} mlError={mlError} onRetry={refetchMl} />
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className={['mt-6 grid grid-cols-1 gap-6', includeRecommendations ? '' : 'lg:grid-cols-2'].join(' ')}>
         <Card>
           <h2 className="card-title">Risk Score Trend</h2>
           <p className="mt-0.5 text-sm text-text-secondary">Weekly risk score progression this term</p>
@@ -269,6 +399,7 @@ export default function StudentDetail({ studentId, onBack }) {
           </div>
         </Card>
 
+        {!includeRecommendations && (
         <Card>
           <div className="flex items-start gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
@@ -292,7 +423,21 @@ export default function StudentDetail({ studentId, onBack }) {
             )}
           </ul>
         </Card>
+        )}
       </div>
+
+      {includeRecommendations ? (
+        <>
+          <StudentRecommendations student={student} onNotify={onNotify} />
+          <Card className="mt-6" id="rag-advisor">
+            <StudentRagChat student={student} />
+          </Card>
+        </>
+      ) : (
+        <Card className="mt-6" id="rag-advisor">
+          <StudentRagChat student={student} />
+        </Card>
+      )}
     </PageLayout>
   )
 }

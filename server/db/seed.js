@@ -217,6 +217,7 @@ export function seedDatabase({ force = false } = {}) {
   if (force) {
     const tables = [
       'auth_sessions',
+      'rag_chat_messages',
       'recommendation_decisions',
       'user_notification_preferences',
       'faculty_courses',
@@ -427,9 +428,84 @@ export function seedDatabase({ force = false } = {}) {
         VALUES (?, ?, ?, 'institution', NULL, ?, ?)
       `).run(termId, row.week, `Week ${row.week}`, row.attendance, row.lmsActivity)
     }
+
+    insertRagChatHistory(db)
   })
 
   console.log('Database seeded successfully.')
+}
+
+const RAG_CHAT_HISTORY = [
+  {
+    studentId: 'STU-1001',
+    userId: 'USR-001',
+    turns: [
+      {
+        user: 'Aisha missed three CS-301 labs. What should I try first?',
+        assistant:
+          'For Aisha Rahman, start with attendance recovery. Confirm why the three CS-301 labs were missed, set a written plan to attend the next two sessions, and ask her to submit the oldest outstanding assignment this week.',
+      },
+      {
+        user: 'I offered office hours last Tuesday and she did not come. What next?',
+        assistant:
+          'Do not restart from office hours. Send a short follow-up that names the missed meeting, offer one alternate 15-minute slot, and copy advising if there is no reply in three business days. Keep the plan to one attendance goal plus one late assignment.',
+      },
+    ],
+  },
+  {
+    studentId: 'STU-1006',
+    userId: 'USR-001',
+    turns: [
+      {
+        user: 'David’s GPA is 1.9 with nine late assignments. Should I refer tutoring?',
+        assistant:
+          'Yes. David Kim needs tutoring plus a late-work triage. Have him complete one CS-210 lab this week and bring that work to tutoring. Do not add a full catch-up list until one assignment is actually submitted.',
+      },
+      {
+        user: 'He finished the linked-list lab after tutoring. How should I follow up?',
+        assistant:
+          'Reinforce that completed lab as the win. Next, require attendance at the coming CS-210 lecture and one additional small coding drill. Because tutoring already helped, keep that slot rather than switching support channels.',
+      },
+    ],
+  },
+  {
+    studentId: 'STU-1011',
+    userId: 'USR-001',
+    turns: [
+      {
+        user: 'Grace is low risk. Any personalized recommendation besides interventions?',
+        assistant:
+          'For Grace Liu, keep engagement high rather than intervening. Invite her to a stretch Algorithms problem or a peer-tutor role, and watch for any sudden drop in LMS activity before exams.',
+      },
+    ],
+  },
+]
+
+function insertRagChatHistory(db) {
+  const insert = db.prepare(
+    `INSERT INTO rag_chat_messages (student_id, user_id, role, content) VALUES (?, ?, ?, ?)`,
+  )
+  for (const thread of RAG_CHAT_HISTORY) {
+    const student = db.prepare('SELECT id FROM students WHERE id = ?').get(thread.studentId)
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(thread.userId)
+    if (!student || !user) continue
+    for (const turn of thread.turns) {
+      insert.run(thread.studentId, thread.userId, 'user', turn.user)
+      insert.run(thread.studentId, thread.userId, 'assistant', turn.assistant)
+    }
+  }
+}
+
+export function seedRagChatIfEmpty() {
+  const db = getDb()
+  const table = db
+    .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'rag_chat_messages'`)
+    .get()
+  if (!table) return
+  const count = db.prepare('SELECT COUNT(*) AS count FROM rag_chat_messages').get().count
+  if (count > 0) return
+  insertRagChatHistory(db)
+  console.log('Seeded per-student RAG advising history.')
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

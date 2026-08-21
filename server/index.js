@@ -2,12 +2,13 @@ import { createApp } from './app.js'
 import { env } from './config/env.js'
 import { validateEnv } from './config/validateEnv.js'
 import { runMigrations } from './db/migrate.js'
-import { seedDatabase } from './db/seed.js'
+import { seedDatabase, seedRagChatIfEmpty } from './db/seed.js'
 import { closeDb } from './db/connection.js'
 
 validateEnv()
 runMigrations()
 seedDatabase()
+seedRagChatIfEmpty()
 
 const app = createApp()
 

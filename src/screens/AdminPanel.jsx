@@ -679,7 +679,17 @@ export default function AdminPanel({ roleRestriction = [ROLES.FACULTY], initialR
   return (
     <PageLayout size="wide">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <SectionHeader as="h2" title="Admin Panel — User Management" description={canAddStudents ? 'Invite faculty by email, or add students directly to the roster. Faculty receive an activation link; students are enrolled in one or more courses immediately.' : 'Invite users with a professional system email and manage accounts in your scope.'} />
+        {canAddStudents ? (
+          <h2 className="font-heading text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">
+            Admin Panel — User Management
+          </h2>
+        ) : (
+          <SectionHeader
+            as="h2"
+            title="Admin Panel — User Management"
+            description="Invite users with a professional system email and manage accounts in your scope."
+          />
+        )}
         <button type="button" onClick={openInviteModal} className="btn-primary shrink-0">
           <Plus size={16} aria-hidden="true" /> {canAddStudents ? 'Add faculty or student' : 'Invite new user'}
         </button>

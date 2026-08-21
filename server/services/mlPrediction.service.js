@@ -19,6 +19,10 @@ async function fetchWithTimeout(url, options = {}) {
     if (error.name === 'AbortError') {
       throw new Error(`ML API timeout after ${timeoutMs}ms`)
     }
+    const cause = error.cause?.code ?? error.code
+    if (cause === 'ECONNREFUSED' || error.message === 'fetch failed' || error.message === 'Failed to fetch') {
+      throw new Error('ML service offline')
+    }
     throw error
   } finally {
     clearTimeout(timer)
@@ -127,34 +131,88 @@ function mapToXapiFeatures(student) {
   }
 }
 
+function localAcademicRisk(student) {
+  const gpa = student.gpa ?? 0
+  const attendance = student.attendance ?? 0
+  const lms = student.lmsActivity ?? 0
+  const success = Number(
+    Math.min(0.98, Math.max(0.04, (gpa / 4) * 0.55 + (attendance / 100) * 0.3 + (lms / 100) * 0.15)).toFixed(4),
+  )
+  return {
+    risk_label: success < 0.55 ? 'At-Risk' : 'On-Track',
+    success_probability: success,
+    estimatedFeatures: true,
+    source: 'platform',
+  }
+}
+
+function localDropoutRisk(student) {
+  const gpa = student.gpa ?? 0
+  const attendance = student.attendance ?? 0
+  const late = student.lateAssignments ?? 0
+  const dropout = Number(
+    Math.min(0.95, Math.max(0.02, (1 - attendance / 100) * 0.4 + Math.min(late, 10) / 10 * 0.3 + (1 - gpa / 4) * 0.3)).toFixed(4),
+  )
+  return {
+    risk_label: dropout >= 0.4 ? 'At-Risk' : 'On-Track',
+    dropout_probability: dropout,
+    estimatedFeatures: true,
+    source: 'platform',
+  }
+}
+
+function localEngagementRisk(student) {
+  const attendance = student.attendance ?? 0
+  const lms = student.lmsActivity ?? 0
+  const success = Number(Math.min(0.98, Math.max(0.04, (lms / 100) * 0.5 + (attendance / 100) * 0.5)).toFixed(4))
+  return {
+    risk_label: success < 0.55 ? 'At-Risk' : 'On-Track',
+    success_probability: success,
+    estimatedFeatures: true,
+    source: 'platform',
+  }
+}
+
 export async function getMlAcademicRisk(student) {
-  const payload = mapToAcademicModelFeatures(student)
-  const data = await fetchWithTimeout(`${env.ml.academic}/predict`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return { ...data, estimatedFeatures: true }
+  try {
+    const payload = mapToAcademicModelFeatures(student)
+    const data = await fetchWithTimeout(`${env.ml.academic}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return { ...data, estimatedFeatures: true }
+  } catch {
+    return localAcademicRisk(student)
+  }
 }
 
 export async function getMlDropoutRisk(student) {
-  const payload = mapToDropoutModelFeatures(student)
-  const data = await fetchWithTimeout(`${env.ml.dropout}/predict`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return { ...data, estimatedFeatures: true }
+  try {
+    const payload = mapToDropoutModelFeatures(student)
+    const data = await fetchWithTimeout(`${env.ml.dropout}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return { ...data, estimatedFeatures: true }
+  } catch {
+    return localDropoutRisk(student)
+  }
 }
 
 export async function getXapiEngagementRisk(student) {
-  const payload = mapToXapiFeatures(student)
-  const data = await fetchWithTimeout(`${env.ml.academic}/predict-xapi`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  return { ...data, estimatedFeatures: true }
+  try {
+    const payload = mapToXapiFeatures(student)
+    const data = await fetchWithTimeout(`${env.ml.academic}/predict-xapi`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return { ...data, estimatedFeatures: true }
+  } catch {
+    return localEngagementRisk(student)
+  }
 }
 
 let _cachedKcStudentIds = null

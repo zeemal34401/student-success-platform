@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runMigrations } from '../server/db/migrate.js'
-import { seedDatabase } from '../server/db/seed.js'
+import { seedDatabase, seedRagChatIfEmpty } from '../server/db/seed.js'
 import { getDb, closeDb } from '../server/db/connection.js'
 import { env } from '../server/config/env.js'
 
@@ -49,6 +49,8 @@ function ensureDatabase() {
   } else {
     console.log('Database ready.')
   }
+
+  seedRagChatIfEmpty()
 
   console.log(`SQLite file: ${path.resolve(rootDir, env.databasePath)}`)
 }
