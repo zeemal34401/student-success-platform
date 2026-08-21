@@ -4,8 +4,11 @@ import { fileURLToPath } from 'node:url'
 import { getDb } from '../db/connection.js'
 import { loadUserById } from './auth.service.js'
 import { AppError } from '../utils/response.js'
+import { env } from '../config/env.js'
 
-const avatarsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../data/avatars')
+const avatarsDir = env.isVercel
+  ? path.join('/tmp', 'avatars')
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../data/avatars')
 const MAX_AVATAR_BYTES = 500_000
 const DATA_URL_PATTERN = /^data:image\/jpeg;base64,([A-Za-z0-9+/=\s]+)$/
 

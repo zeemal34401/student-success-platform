@@ -17,13 +17,16 @@ export function createApp() {
   app.disable('x-powered-by')
   app.use(
     cors({
-      origin: env.corsOrigin,
+      // Reflect request origin when configured as '*' (required with credentials).
+      origin: env.corsOrigin === '*' ? true : env.corsOrigin,
       credentials: true,
     }),
   )
   app.use(express.json({ limit: '1mb' }))
 
-  const avatarsPath = path.resolve(__dirname, 'data/avatars')
+  const avatarsPath = env.isVercel
+    ? path.join('/tmp', 'avatars')
+    : path.resolve(__dirname, 'data/avatars')
   fs.mkdirSync(avatarsPath, { recursive: true })
   const avatarStatic = express.static(avatarsPath, {
     maxAge: '7d',
@@ -45,7 +48,7 @@ export function createApp() {
     return next()
   })
 
-  if (fs.existsSync(distPath)) {
+  if (!env.isVercel && fs.existsSync(distPath)) {
     app.use(express.static(distPath))
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api')) return next()

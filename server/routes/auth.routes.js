@@ -100,7 +100,7 @@ router.get(
 router.get(
   '/demo-accounts',
   asyncHandler(async (_req, res) => {
-    if (env.isProduction) {
+    if (!env.allowDemoAccounts) {
       throw new AppError('Demo accounts are disabled in production', 404, 'NOT_FOUND')
     }
     sendSuccess(res, getDemoAccounts())

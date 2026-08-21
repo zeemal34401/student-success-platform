@@ -56,4 +56,10 @@ function ensureDatabase() {
 }
 
 ensureEnvFile()
-ensureDatabase()
+
+// Vercel build/runtime uses /tmp SQLite via serverless init — skip local DB bootstrap.
+if (process.env.VERCEL) {
+  console.log('Vercel detected — skipping local database ensure (handled at runtime).')
+} else {
+  ensureDatabase()
+}
